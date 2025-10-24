@@ -969,12 +969,12 @@ optimization
 
 algorithms,”
 
-policy
-
 arXiv
 
 “Proximal
 arXiv:1707.06347, 2017.
+
+policy
 
 [45] A. Stooke, K. Lee, P. Abbeel, and M. Laskin, “Decoupling representa-
 tion learning from reinforcement learning,” in International conference

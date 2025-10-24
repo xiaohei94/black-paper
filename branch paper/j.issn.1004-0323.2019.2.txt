@@ -428,9 +428,9 @@ TLS
 
 第
 
-３４
-
 卷
+
+３４
 
 其中较难建模的是枝
 
@@ -1360,9 +1360,9 @@ DEM
 
 第
 
-３４
-
 卷
+
+３４
 
 防止地面点被剔 除
 
@@ -1909,11 +1909,11 @@ s 是 对 残 差V 未 知 标 准 偏 差σ
 
 ９５％
 
-c
+x
 
 V
 
-x
+c
 
 ＝
 
@@ -3978,9 +3978,9 @@ ComputerVision,Berlin,１９９８．
 
 第
 
-卷
-
 ３４
+
+卷
 
 [２５]　ZhangZ．ParameterEstimation Techniques:A Tutorialwith
 

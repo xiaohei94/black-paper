@@ -312,9 +312,9 @@ The acceleration of the quadrotor is described as
 
 
 
-
-
 
+
+
 
 ˙v =
 
