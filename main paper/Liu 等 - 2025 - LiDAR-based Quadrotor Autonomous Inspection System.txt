@@ -1,0 +1,1876 @@
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+<Society logo(s) and publica-
+tion title will appear here.>
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+Received 27 March, 2025; revised 8 July, 2025; accepted 15 August, 2025; Date of publication XX Month, XXXX; date of current
+version XX Month, XXXX.
+
+Digital Object Identifier 10.1109/XXXX.2022.1234567
+
+LiDAR-based Quadrotor Autonomous
+Inspection System in Cluttered
+Environments
+Wenyi Liu∗1, Huajie Wu∗1, Liuyu Shi1, Fangcheng Zhu1, Yuying Zou1,
+Fanze Kong1 and Fu Zhang1, Member, IEEE
+1Department of Mechanical Engineering, University of Hong Kong, Pokfulam, Hong Kong
+∗ Contributed equally. Corresponding author: Fu Zhang (email: fuzhang@hku.hk).
+
+ABSTRACT In recent years, autonomous unmanned aerial vehicle (UAV) technology has seen rapid
+advancements, significantly improving operational efficiency and mitigating risks associated with manual
+tasks in domains such as industrial inspection, agricultural monitoring, and search-and-rescue missions.
+Despite these developments, existing UAV inspection systems encounter two critical challenges: limited
+reliability in complex, unstructured, and GNSS-denied environments, and a pronounced dependency on
+skilled operators. To overcome these limitations, this study presents a LiDAR-based UAV inspection
+system employing a dual-phase workflow: human-in-the-loop inspection and autonomous inspection.
+During the human-in-the-loop phase, untrained pilots are supported by autonomous obstacle avoidance,
+enabling them to generate 3D maps, specify inspection points, and schedule tasks. Inspection points are
+then optimized using the Traveling Salesman Problem (TSP) to create efficient task sequences. In the
+autonomous phase, the quadrotor autonomously executes the planned tasks, ensuring safe and efficient
+data acquisition. Comprehensive field experiments conducted in various environments, including slopes,
+landslides, agricultural fields, factories, and forests, confirm the system’s reliability and flexibility. Results
+reveal significant enhancements in inspection efficiency, with autonomous operations reducing trajectory
+length by up to 40% and flight time by 57% compared to human-in-the-loop operations. These findings
+underscore the potential of the proposed system to enhance UAV-based inspections in safety-critical and
+resource-constrained scenarios.
+
+INDEX TERMS Autonomous aerial vehicles, LiDAR-based quadrotor, Inspection systems, GNSS-denied
+environments, Collision avoidance, Integrated planning and control
+
+I. INTRODUCTION
+
+O VER the past decade, advancements in autonomous
+
+unmanned aerial vehicle (UAV) technology have led to
+their widespread adoption across various industries, includ-
+ing industrial inspections [1]–[3], precision agriculture [4],
+delivery services [5], and search and rescue operations [6].
+Integrating UAVs into industrial applications has resulted
+in numerous benefits, such as reduced economic costs, en-
+hanced operational efficiency, and mitigated risks to human
+workers.
+
+These advantages are particularly pronounced in the field
+of inspections, where many tasks pose significant hazards
+to human workers, such as inspections in mining zones [7]
+or in areas that are difficult to access, such as slopes [8].
+UAVs offer a safer and more efficient solution to these
+challenges, as they can easily access and navigate these
+
+areas. Furthermore, UAVs are capable of carrying various
+sensors,
+including optical cameras, Light Detection and
+Ranging (LiDAR) sensors, thermal imaging cameras, and
+others, to capture detailed information about inspection sites
+and transmit the data to users for analysis.
+
+An inspection task is a planned activity aimed at examin-
+ing and evaluating an object, structure, piece of equipment,
+or area to ensure compliance with specific standards or
+requirements. For UAV inspection, completing such a task
+typically involves deploying appropriate sensors, identifying
+the inspection targets, planning the flight route, and accessing
+the designated objects to collect relevant data. A standard
+UAV inspection system is generally divided into two key
+stages: task scheduling and task execution. During the task
+scheduling stage, users define the objects of interest for
+inspection and assign the corresponding flight routes to reach
+
+This work is licensed under a Creative Commons Attribution 4.0 License. For more information, see https://creativecommons.org/licenses/by/4.0/
+
+VOLUME ,
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+1
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+:
+
+FIGURE 1. The system overview of our LiDAR-based quadrotor.
+
+these targets. In the subsequent task execution stage, the
+UAV navigates to the designated inspection sites and utilizes
+its sensors to capture up-to-date information for monitoring
+and evaluation purposes.
+
+There are two common approaches for scheduling in-
+spection tasks. The first method involves directly setting
+the inspection points. Users can designate points on a map
+obtained through pre-flight to scan the inspection sites [9]–
+[13], or by manually controlling the UAV to fly near the
+inspection points and record them [14]. This method relies
+heavily on experienced pilots, leading to high human costs.
+The second approach involves providing the features of
+the inspection points, allowing the UAV to explore the
+environment and searching for these features to locate the
+inspection points [15]. However, achieving accurate matches
+between the feature information and the actual sensor data
+can be challenging due to variations in illumination and
+environmental conditions.
+
+To execute the designated inspection task, several key
+modules are included in the inspection system, such as
+localization, mapping, planning, and control. Among these,
+the localization module is of paramount importance. Most
+commercial drones (e.g., DJI [11], and Skydio [12]) pri-
+marily rely on the Global Positioning System (GPS) for
+positioning. However, in GPS-denied environments, such as
+indoor settings, or areas with weak GPS signals, like dense
+forests, this reliance can pose challenges. To address this
+issue, some drones utilize vision-based localization [16]–
+
+[18], enabling indoor operations but facing difficulties in
+low-light conditions and with detecting thin obstacles, such
+as branches, which can compromise flight safety.
+To address the aforementioned challenges,
+
+this article
+presents a comprehensive LiDAR-based inspection system,
+as illustrated in Fig. 1. The system consists of a human-
+in-the-loop phase for scheduling inspection tasks and an
+autonomous phase for repeatedly executing the scheduled
+missions. The core motivation behind this design lies in
+the fact that, in environments that are unknown, heavily
+occluded, or lack GNSS signals, fully autonomous UAV
+inspection remains highly challenging, as the system often
+struggles to reliably identify targets and generate feasible
+trajectories. Therefore, we introduce a human-in-the-loop
+phase in which the operator assists in defining inspection
+targets, while the quadrotor autonomously constructs a 3D
+map and leverages assisted obstacle avoidance to ensure safe
+navigation. Once task scheduling is completed, the system
+transitions to the autonomous inspection phase, where the
+quadrotor visits each inspection point and collects relevant
+data. The system offers two significant advantages: First,
+during the human-in-the-loop stage, even untrained operators
+can interact with the system to scan the environment map
+and schedule inspection tasks. This feature lowers the barrier
+to entry for users and significantly reduces labor costs.
+Second, during the autonomous inspection stage, the system
+can independently access assigned inspection points and
+robustly execute various inspection tasks without relying
+
+2
+
+VOLUME ,
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+Onboard ComputerFPV Camera320mmLiDARFlight ControllerUninterruptible Power SupplyGoggle GlassesRemote ControllerLiDAR-based quadrotorPilotAutonomous InspectionHuman-in-the-loop InspectionPlanning and ControlMappingLocalizationFast-LIO2 with relocalizationEnhancedROG-MapPlanning and ControlMappingLocalizationFast-LIO2EnhancedROG-MapAPAS-IPC with joystick inputodometry(100Hz)point cloud(30Hz)odometry(100Hz)point cloud(30Hz)probability map and inflated map(30Hz)odometry(100Hz)probability map and inflated map(30Hz)odometry(100Hz)joystick commands(10Hz)controlcommands(100Hz)LiDAR points(30Hz)IMU(100Hz)IMU(100Hz)LiDAR points(30Hz)initial point cloud mapglobal occupancy grid mapinspection points 𝐐𝑖𝑛𝑠optimized inspectionpoints 𝐐𝒐𝒑𝒕IPC with 𝐏𝑜𝑝𝑡inputInspection PointsOptimizationTraveling Salesman Problem
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+<Society logo(s) and publication title will appear here.>
+
+on GPS. This capability enables repeated execution of the
+same inspection routine, supporting long-term, low-cost, and
+fully unattended operation. It is worth noting that this work
+focuses on implementing and validating the integrated and
+complete system. As for the technical details of individual
+modules, prior work (e.g., FAST-LIO2 [19] in Localization
+module, ROG-Map [20] in Mapping module, IPC [21] in
+Planning and Control module) is adopted here.
+
+During the human-in-the-loop inspection phase, the sys-
+tem is used to scan a 3D map of the unknown environ-
+ment, which can be used to assign inspection points. An
+autonomous obstacle avoidance mechanism assists the pilot
+in controlling the quadrotor during this phase, significantly
+lowering the threshold for system use. Even an untrained
+pilot can easily operate the system. Specifically, the pilot
+simply needs to direct the quadrotor to target points and
+record the position, yaw angle, and gimbal pitch angle at
+each point, without worrying about collision between the
+UAV and the environment, as the UAV autonomously avoids
+obstacles in flight. After the flight, all recorded inspection
+points are used to optimize and find the shortest path that
+can traverse these points by solving the Traveling Salesman
+Problem (TSP). After this stage, the UAV can acquire a
+sequence of inspection points and a shortest path to traverse
+them.
+
+The autonomous inspection phase is designed to execute
+the scheduled inspection tasks. During this stage, the quadro-
+tor autonomously follows the optimized path derived from
+TSP to reach each inspection point in sequence, recording
+sensor data such as images and LiDAR information for
+detailed analysis. Notably, we have employed LiDAR on
+the UAV and integrated Simultaneous Localization and Map-
+ping (SLAM) technology into the localization module. This
+LiDAR-based navigation design enables reliable operation
+in unknown, cluttered, and GNSS-denied environments and
+enhances overall inspection efficiency and safety.
+
+We validated the proposed system by performing various
+tasks in cluttered, unstructured, and GNSS-denied envi-
+ronments, including the slope, landslide, agricultural area,
+factory, and forest. All experiments were conducted in real-
+world settings. Initially, the human-in-the-loop inspection
+phase was performed to obtain inspection points, followed by
+the autonomous phase to monitor these points sequentially.
+trajectories from both phases were illustrated and
+Flight
+compared based on metrics such as inspection date, the
+maximum speed, the average speed, trajectory length, and
+flight time. The autonomous inspection phase achieved up
+to 40% shorter trajectory lengths and 57% reduced flight
+time, with a comparable maximum speed, compared to the
+human-in-the-loop inspection phase. In the slope inspection
+task,
+the autonomous inspection was executed 17 days
+after the human-in-the-loop inspection, demonstrating our
+system is robust to temporal changes in the environment.
+Overall, the system consistently revisited inspection targets
+with high spatial and directional accuracy, as evidenced by
+
+image overlaps between the two phases exceeding 0.80 in
+most cases and reaching up to 0.982 across all evaluated
+environments. These results demonstrate that the proposed
+inspection system can autonomously monitor inspection tar-
+gets with high accuracy, reduced energy consumption and
+improved operational efficiency.
+
+II. HARDWARE STRUCTURE
+
+FIGURE 2. Different views of our LiDAR-based quadrotor.
+
+Table 1 and Fig. 2 provide a comprehensive descrip-
+tion of the hardware configuration of our LiDAR-based
+quadrotor. The quadrotor features a lightweight Livox Mid-
+360 LiDAR1, weighing only 265 g, as its primary sensor.
+This LiDAR employs a non-repetitive scanning approach,
+accumulating data over time to generate dense point cloud
+maps. Besides, it features a 360-degree horizontal field of
+view and a 59-degree vertical field of view, enabling the
+perception of a wide range of scenes. The onboard compu-
+tation is handled by an Intel NUC mini-computer, featuring
+an Intel i7-1260P CPU capable of operating at a frequency
+of 4.7 GHz. This high-performance processor provides suf-
+ficient computational power for real-time processing tasks.
+To enable real-time observation of the flight process by the
+pilot and capture photos and videos of specific areas, we use
+an FPV camera DJI O3 Air Unit2, a high-definition digital
+video transmission system, with the DJI Goggles 23. This
+video transmission system offers an impressively low latency
+of 40 ms, providing timely feedback on the surrounding
+environment for the pilot. Moreover, it supports recording
+4 K videos at a high frame rate of 120 Hz, enabling in-depth
+post-analysis after the flights. To enlarge the Field of View
+of the FPV camera and facilitate monitoring both the top and
+bottom of the flexible debris-resisting barriers on the slope,
+the camera is installed on a pitch-axis gimbal. The pitch
+angle of the gimbal is commanded by the remote controller
+in real-time during flight. To maximize flight endurance,
+which is a critical consideration, our quadrotor is equipped
+with 7-inch propellers and a high-capacity 6S-5300mAh
+battery. To enhance quadrotor safety, carbon fiber propeller
+
+1https://www.livoxtech.com/mid-360
+2https://www.dji.com/o3-air-unit
+3https://www.dji.com/goggles-2
+
+VOLUME ,
+
+3
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+(a)(b)(c)(d)Intel NUCT-motor F90LivoxMid-360
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+:
+
+guards are meticulously designed and installed to minimize
+the risk of propeller-related accidents. These guards protect
+both the quadrotor and the pilot, ensuring safe and reliable
+operation. Furthermore, we design a flight controller based
+on the PX4 FMUv44 standard, which reduced both the cost
+and size of our quadrotr system. To reduce deployment time,
+we develop an uninterruptible power supply (UPS) module,
+ensuring uninterrupted power supply to onboard computers
+and electronics during battery replacement.
+
+TABLE 1. Device Information of our In-House Developed Quadrotor.
+
+Device
+ESC
+Motor
+Propeller
+Receiver
+Flight Controller
+UPS
+Battery
+Onboard Computer
+LiDAR
+FPV Camera
+Goggle glasses
+Remote Controller
+
+Description
+T-motor F60A 8S 4IN1
+T-motor F90 KV1300
+DALPROP T7057
+RadioLink R12DSM
+In-house designed
+In-house designed
+ACE 6S-5300mAh-30C lithium battery
+Intel NUC with Intel i7-1260P CPU
+Livox Mid-360
+DJI O3 Air Unit
+DJI Goggles 2
+RadioLink AT10S PRO
+
+Weight (g)
+15.3
+41.8
+7.5
+2.5
+6.3
+2.7
+664
+270
+265
+36.4
+290
+980
+
+After these devices are integrated into the airframe com-
+posed of carbon plates and aluminum columns, we conduct
+tests on the developed quadrotor. The quadrotor features a
+motor-to-motor distance (i.e., wheelbase) of 320 mm and
+overall dimensions of 422 mm in length, 422 mm in width,
+and 270 mm in height. With a total mass of 2 kg,
+the
+quadrotor achieves a thrust-to-weight ratio of 3, ensuring
+efficient and stable flight performance. Additionally,
+the
+maximum flight endurance is measured to be 12 minutes.
+
+III. SOFTWARE STRUCTURE
+The software structure of our LiDAR-based quadrotor is
+shown in Fig. 1. The software architecture comprises two
+primary components: human-in-the-loop inspection (Sec. A),
+and autonomous inspection (Sec. B).
+
+In the human-in-the-loop inspection phase, the quadrotor
+is guided by the pilot’s joystick commands and data inputs
+from onboard sensors (e.g., LiDAR and IMU) to perform
+inspection tasks in an unknown and cluttered environment.
+The pilot controls the quadrotor to reach the inspection
+points and records the position p, yaw angle ϕ, and gimbal
+pitch angle θ at each inspection point q = (p, ϕ, θ).
+Simultaneously, the quadrotor autonomously avoids obsta-
+cles during flight to ensure flight safety. After completing
+the human-in-the-loop inspection flight, inspection points
+optimization (Sec. 4) solves the Traveling Salesman Prob-
+lem (TSP) to reorder the recorded N inspection points
+Qins = [qins,0, qins,1, ..., qins,N −1] based on the shortest
+path criterion. The optimized N inspection points Qopt =
+[qopt,0, qopt,1, ..., qopt,N −1], are subsequently used as inputs
+for the autonomous inspection phase.
+
+In the autonomous inspection phase, the quadrotor, re-
+lying on LiDAR and IMU sensors, autonomously executes
+
+4https://docs.px4.io/main/en/flight controller/
+
+repetitive inspection tasks within the environment previously
+explored during the human-in-the-loop inspection phase. The
+quadrotor navigates to the optimized inspection points in
+sequence, collecting image and LiDAR data for subsequent
+detailed analysis.
+
+A. Human-in-the-loop Inspection
+1) Localization
+In human-in-the-loop inspection, the localization module sets
+the initial position pinit of the quadrotor as the origin of
+the world frame to obtain the corresponding LiDAR-inertial
+odometry. In this work, the open-source framework FAST-
+LIO2 [19] is adapted to meet the system requirements. FAST-
+LIO2 is a fast, robust, and versatile LiDAR-inertial odometry
+framework built upon a tightly coupled, iterated Kalman
+filter. It introduces two key innovations. First, it directly
+registers raw LiDAR points to the map without requiring
+hand-engineered feature extraction, which enables the system
+to exploit subtle geometric structures in the environment
+and improves adaptability to LiDARs with varying scanning
+patterns. Second, it employs an incremental k-d tree (ikd-
+Tree) [22] for map maintenance, supporting real-time point
+insertion, deletion, and dynamic re-balancing, with efficient
+downsampling. Owing to its high computational efficiency
+and robustness, FAST-LIO2 serves as the foundation for our
+localization module, which is modified and integrated into
+the overall system.
+
+By performing IMU pre-integration, the modified FAST-
+LIO2 provides low-latency state estimation at a frequency
+of 100 Hz, with latency under 1 ms. Moreover, it generates
+world-coordinate-registered point clouds at a scanning rate of
+30 Hz, producing approximately 200,000 points per second
+with a latency of less than 10 ms.
+
+To further support the relocalization function during sub-
+sequent autonomous inspection tasks, an initial point cloud
+map is generated for feature matching. The quadrotor re-
+mains stationary at its initial position pinit while accumu-
+lating LiDAR point cloud data over a period (e.g., 5 s).
+Leveraging the non-repetitive scanning characteristic of the
+Mid-360 LiDAR, this process generates a dense and feature-
+rich initial point cloud map.
+
+2) Mapping
+The open-source framework ROG-Map [20] utilizes a zero-
+copy map sliding strategy to maintain two local occupancy
+grid maps (OGMs). The first local map is the probability
+map, where grid cells are classified as Occupied, Unknown,
+or Known Free based on the occupancy probability updates
+derived from ray casting. The second local map is the inflated
+map, utilized for robot navigation in configuration space by
+inflating obstacles. This map adopts an incremental update
+mechanism, with grid cell states classified as either Inflation
+or No Inflation, depending on the probability values from
+the probability map.
+
+4
+
+VOLUME ,
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+<Society logo(s) and publication title will appear here.>
+
+In [8],
+
+three enhancements were introduced to ROG-
+Map specifically tailored for dense vegetation environments:
+Unknown Grid Cells Inflation, Infinite Points Ray Casting,
+and Incremental Frontiers Update. Unknown Grid Cells
+Inflation expands Unknown grid cells to the robot’s size,
+preventing collisions with obstacles in Unknown areas and
+significantly improving safety. Infinite Points Ray Casting
+tackles the issue of no LiDAR returned points when facing
+the sky. Incremental Frontiers Update efficiently updates
+frontier information based on the latest sensor data. This
+process replaces a large number of Unknown grids with a
+small number of frontier grids, thereby reducing the compu-
+tation time required for safe flight corridor (SFC) generation
+in the planning. These three enhancements are applicable
+across various inspection tasks, so we directly adopted this
+enhanced version of ROG-Map. For more technical details,
+please refer to [8].
+
+In addition, we maintain an additional large-scale, low-
+resolution global occupancy grid map. This map is centered
+on the initial position pinit and remains static, without
+sliding relative to the robot’s position. Each grid cell in this
+map represents either an Occupied or Free state, determined
+based on the grid state in the probabilistic map. For example,
+if a grid cell in the probabilistic map is marked as Known
+Free, its state is set to Free; otherwise, it is considered
+Occupied. This global map serves as the foundation for
+path planning in subsequent inspection points optimization,
+specifically for determining the path lengths between pairs
+of inspection points.
+
+3) Planning and Control
+In human-in-the-loop inspection, the pilot determines the
+inspection targets impromptu from the transmitted video and
+commands the quadrotor’s high-level flight direction via the
+joysticks on the remote controller. Meanwhile, the quadrotor
+navigation system attempts to fly in the specified direction
+while avoiding obstacles on the way. During the flight, the
+pilot can use the joystick on the remote controller to record
+the current position, orientation and camera angle, which will
+serve as the inspection point q = (p, ϕ, θ).
+
+We directly adopt
+
+the integrated planning and control
+(IPC) module from [8] to achieve assisted obstacle avoidance
+functionality for our quadrotor. Here, we refer to this adapted
+version as APAS-IPC (Advanced Pilot Assistance System
+based on IPC), which extends the original IPC framework
+[21] by enabling assisted obstacle avoidance under pilot-
+guided commands. APAS-IPC is designed to enable safe
+quadrotor navigation in dense, cluttered, and dynamic envi-
+ronments with low computational latency. It tightly integrates
+planning and control into a linear Model Predictive Control
+(MPC) formulation, allowing the system to generate optimal
+trajectories and corresponding control commands at 100 Hz.
+the APAS-IPC architecture consists of a
+frontend and backend. In the frontend, the local goal and
+yaw reference of the quadrotor are first calculated based on
+the pilot’s joystick commands and odometry. A collision-
+
+Specifically,
+
+free reference path is then generated by breadth-first search
+over the inflated occupancy grid map. Based on this path, the
+safety flight corridor (SFC) is generated within the Known
+Free area of the probability map, represented as a sequence
+of overlapping convex polyhedra.
+
+In the backend, the trajectory planning and control prob-
+lems are formulated as a linear MPC problem. In the
+MPC formulation, the quadrotor is modeled as a high-order
+integral system (a linear system) to follow the reference
+path from the frontend. Each convex polyhedron in the
+SFC defines a set of hyperplanes, which are incorporated
+into the MPC as linear inequality constraints to ensure
+collision avoidance. After solving the MPC, the optimal
+control actions (i.e., acceleration and jerk) are transformed
+into the quadrotor actuator commands (i.e., angular velocity
+and throttle) through differential flatness [23], which are
+finally tracked by a lower-level controller implemented on
+the autopilot to produce motor commands.
+
+4) Inspection Points Optimization
+
+FIGURE 3. Inspection points optimization in the 2D case. By solving the
+Traveling Salesman Problem (TSP), the sequence of inspection points
+under human-in-the-loop inspection (green lines with yellow stars) is
+optimized, resulting in the shortest total path (purple lines with yellow
+stars), thereby significantly improving efficiency in autonomous
+inspection.
+
+their
+
+During the human-in-the-loop inspection flight, N in-
+spection points Qins = [qins,0, qins,1, ..., qins,N −1] are
+recorded, but
+spatial distribution in the three-
+dimensional space may be scattered, leading to intersecting
+paths that significantly reduce inspection efficiency in au-
+tonomous inspection, as illustrated by the green lines with
+yellow stars in Fig. 3. To enhance inspection efficiency, it is
+necessary to find the shortest path that visits each inspection
+point once and returns to the starting point (depicted by
+the purple lines with yellow stars in Fig. 3), given a series
+of inspection points and the distances between each pair
+of points. This problem is equivalent to the well-known
+Traveling Salesman Problem (TSP) [24], [25], for which
+numerous solution methods [26], [27] exist. Inspired by
+[28], [29], we employ a Lin-Kernighan-Helsgaun heuristic
+solver [30] to solve the TSP in real
+time. Additionally,
+since the Euclidean distance between two inspection points
+in cluttered environments may differ significantly from the
+
+VOLUME ,
+
+5
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+13654201463250Nthe N-thinspection point’s positionobstacleHuman-in-the-loop InspectionAutonomous Inspection
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+:
+
+actual navigation path length, we utilize the A* algorithm
+[31] on a pre-constructed global map to calculate the path
+length between any two inspection points. Finally, we ob-
+tain the optimized sequence of inspection points Qopt =
+[qopt,0, qopt,1, ..., qopt,N −1], which serves as targets for the
+quadrotor in autonomous inspection.
+
+B. Autonomous Inspection
+1) Localization
+In autonomous inspection, the localization module continues
+to utilize the modified Fast-LIO2 (Sec. 1) to estimate the
+full state of the quadrotor and transform LiDAR point
+clouds from the local frame to the world frame. To maintain
+consistency in the inspection points between human-in-the-
+loop inspection and autonomous inspection, the localization
+module in this mode incorporates an additional relocalization
+function to align the odometric world frame within the
+same inspection site. This alignment is achieved using the
+point-to-plane Iterative Closest Point (ICP) algorithm [32],
+which provides an initial state estimate by relocalizing the
+quadrotor near the origin of the initial point cloud map (i.e.,
+initial position pinit) constructed during human-in-the-loop
+inspection (Sec. 1).
+
+Given the sensitivity of ICP to rotation, directly per-
+forming full six-degrees-of-freedom (6-DOF) registration
+initially may not converge. Instead, we sample a range of
+initial rotations, only optimizing the translation for each.
+The rotation and optimized translation corresponding to the
+lowest cost are recorded as the initial pose, followed by a
+full 6-DOF ICP to determine the quadrotor’s current position
+in the initial point cloud map.
+
+2) Mapping
+The mapping module in autonomous inspection, similar
+to the human-in-the-loop inspection (Sec. 2), utilizes the
+method from [8] to maintain the probability map and the
+inflated map. However, a key difference lies in the fact that,
+since the inspection points have already been optimized, the
+mapping module in this mode does not need to maintain an
+additional global occupancy grid map.
+
+3) Planning and Control
+In autonomous inspection, we adopt the integrated planning
+and control framework (IPC) from [21] to enable safe,
+efficient, and fully autonomous navigation for the quadrotor.
+IPC consists of a lightweight frontend and a model predictive
+control (MPC) backend. In the frontend,
+it employs the
+A* algorithm [31] to generate the reference path on the
+local map. In the backend, it generates a series of convex
+polyhedrons (i.e., SFC) to represent the free space in the
+environment. The trajectory planning and control problem
+is then formulated as a linear MPC problem, which aims
+to compute optimal control actions that follow the reference
+path while remaining within the SFC constraints. By solving
+the linear MPC at 100 Hz, the optimal control actions are
+transformed into low-level control commands (i.e., angular
+
+velocity and throttle) through the differential flatness of
+the quadrotor, thereby enabling the complete motion of the
+quadrotor in free space.
+
+In this work, the quadrotor autonomously visits a sequence
+of inspection targets qopt,n = [popt,n, ϕopt,n, θopt,n] for
+n = 0, 1, ..., N − 1, where each 3D position popt,n is used
+as the navigation goal. For each target, a reference path is
+computed via the A* algorithm, and the SFC is generated
+following the method in [33]. The resulting path and corridor
+are fed into the IPC backend to generate control commands.
+Upon reaching each destination, the quadrotor hovers for a
+preset duration (e.g., 3 seconds) and adjusts its yaw angle
+and gimbal pitch angle according to the record Ψopt and
+Θopt, respectively, to capture images of the specified area.
+However, in some scenarios, environmental changes such
+as falling branches or moving objects may render the inspec-
+tion points unsafe (i.e., in Unknown Inflation or Occupied
+Inflation region of the inflated map). In such cases, the
+quadrotor performs a breadth-first search to locate the nearest
+No Inflation point as a hover point. Although the quadrotor
+may not reach the exact predefined inspection target, it still
+adjusts its yaw and gimbal pitch angles to collect image
+data. If the quadrotor fails to reach the predefined inspection
+point and the hover time exceeds a preset limit (e.g., 5
+seconds),
+is abandoned, and a new
+reference path is generated from the current position to
+the next inspection point. This approach ensures that the
+quadrotor can autonomously complete the entire inspection
+task and return to the first point in Popt to land.
+
+the inspection point
+
+IV. Field Experiments
+
+FIGURE 4. Our quadrotor passing through the narrow spaces.
+
+Our system focuses on performing inspection tasks in
+cluttered and GNSS-denied environments. As far as we
+know, no similar work has been reported in academia. For
+commercial inspection drones (such as DJI M30 and Skydio
+X10), although we cannot directly obtain the equipment for
+actual
+testing, we read their product manuals and know
+they mainly rely on GPS signals or visual feature
+that
+matching for localization. Numerous literatures [34], [35]
+have confirmed that
+these two localization methods are
+difficult to work reliably in the absence of GPS signals or
+dark environments, which are our target experiment scenes.
+
+6
+
+VOLUME ,
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+quadrotor’s size: 422×422×270 mm
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+<Society logo(s) and publication title will appear here.>
+
+In addition, commercial drones are usually large in size
+(such as the DJI M30’s size with propellers is 876 × 991
+× 215 mm [36] and Skydio X10’s size is 790 × 650 ×
+145 mm [37]), and thus their ability to pass through dense
+vegetation or narrow spaces is limited. As shown in Fig. 4,
+there is a narrow area with a passage width of only about
+650 mm in our experimental scene, which in itself excludes
+the possibility of commercial drones with a size larger than
+this limit in such scenes. In contrast, the size of the drone
+we designed is significantly reduced (the size is only 422
+× 422 × 270 mm), so it can move freely in such confined
+spaces.
+
+To validate the practicality of our LiDAR-based quadrotor
+inspection system for various tasks, we conducted field
+experiments in multiple cluttered and unstructured environ-
+ments, including scenarios such as slope, landslide, agri-
+culture, factory, and forestry. These tasks all follow the
+workflow of human-in-the-loop inspection followed by au-
+tonomous inspection, aiming to demonstrate the broad ap-
+plicability of our approach beyond the built environment,
+particularly in scenarios where environmental conditions are
+uncontrollable.
+
+In the first phase, the human-in-the-loop inspection, the
+quadrotor is deployed to a new inspection scene, where
+the pilot guides it using joystick commands. The quadrotor
+autonomously avoids obstacles along its flight path and
+reaches designated inspection targets. During this phase, the
+position, yaw angle, and gimbal pitch angle of the inspection
+points are recorded. Once the human-in-the-loop inspection
+is completed,
+the Traveling Salesman Problem (TSP) is
+solved to optimize the sequence of the recorded inspection
+points,
+including their positions and corresponding yaw
+and gimbal pitch angles, to generate the shortest possible
+inspection path.
+
+In the second phase,
+
+the autonomous inspection,
+
+the
+quadrotor operates independently within the same environ-
+ment. Using the optimized inspection point data,
+it au-
+tonomously collects images and LiDAR point cloud data
+from the inspection targets without requiring human inter-
+vention.
+
+As no comparable autonomous platform can complete
+inspection in such settings, we did not
+include baseline
+comparisons. Instead, we evaluate the performance improve-
+ment from human-in-the-loop to autonomous inspection to
+highlight the effectiveness of our complete system. Specifi-
+cally, we compare key metrics such as inspection duration,
+speed, flight trajectory, and control consistency across the
+two stages. We further analyze camera pose differences and
+image overlaps at corresponding inspection points using 2D
+homography to measure the system’s relocalization preci-
+sion. These results demonstrate the repeatability and auton-
+omy of our system under conditions previously unachievable
+by commercial or academic platforms. Such capability is
+critical for real-world inspection applications, where periodic
+monitoring of the same targets is required to detect structural
+
+degradation, environmental changes, or safety hazards. The
+ability to autonomously revisit previously recorded inspec-
+tion targets with high precision ensures consistency and
+reliability in long-term inspection workflows.
+
+A. Inspection for Slope Task
+We conducted a quadrotor inspection task in Hong Kong,
+an advanced region for slope management5. The selected
+site, slope 11SW-C/ND6 near Victoria Road in Pokfulam,
+features dense vegetation and steep terrain, posing typical
+challenges for UAV inspections, including narrow passages
+and intermittent GPS signals. The inspection targeted key
+infrastructural components, such as the concrete layers re-
+inforcing the mountainside and flexible debris-resisting bar-
+riers designed to intercept landslide debris. Specific issues
+identified include corrosion of the wire ropes supporting the
+barriers (Fig. 5(b)), accumulation of debris at the bottom
+of the barriers (Fig. 5(c)), and the condition of the blocked
+drainage pipe and corrosion within the concrete layers (Fig.
+5(d)).
+TABLE 2. Flight Data for the Slope Inspection Task
+
+Inspection Mode
+
+Human-in-the-loop
+
+Autonomous
+
+Inspection Date
+
+2024-09-13
+
+2024-09-30
+
+Max. Speed (m/s)
+
+Avg. Speed (m/s)
+
+Trajectory Length (m)
+
+Flight Time (min : sec)
+
+2.02
+
+0.57
+
+176.88
+
+5 : 09
+
+2.20
+
+0.88
+
+118.42
+
+2 : 14
+
+In this experiment, our quadrotor completed the full
+inspection workflow. Flight data recorded during the in-
+spection, as shown in Table 2, demonstrate the system’s
+efficiency in navigating through complex environments, with
+key metrics such as inspection date, maximum flight speed,
+trajectory length, and flight time. Notably, the autonomous
+inspection was conducted 17 days after the human-in-the-
+loop phase, yet the system remained fully functional without
+re-tuning, reflecting its robustness in real-world deployments.
+Compared to the human-in-the-loop inspection phase, the
+autonomous inspection phase achieved a 33% reduction in
+trajectory length and a 57% reduction in flight time. This
+improvement is attributed to the cluttered and dense slope
+environment, where, during the human-in-the-loop inspec-
+the quadrotor frequently rejected coarse commands
+tion,
+from inexperienced operators. In contrast, the autonomous
+inspection leveraged prior information gathered during the
+human-in-the-loop phase, which enabled more informed path
+planning and minimized redundant exploration. Furthermore,
+the autonomous system exhibited more consistent decision-
+making, smoother trajectories, and improved control sta-
+bility, all of which contributed to its enhanced operational
+efficiency in challenging terrain.
+
+As shown in Fig. 5, during the autonomous inspection,
+the quadrotor autonomously navigated to inspection points
+
+5https://www.bbc.com/future/article/20220225-how-hong-kong-protects-
+
+people-from-its-deadly-landslides
+
+VOLUME ,
+
+7
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+:
+
+FIGURE 5. Overview of the quadrotor inspection system in slope task. (a) Point cloud map constructed during the inspection. (b) Image captured of the
+corrosion of the wire ropes supporting the barriers. (c) Image captured of the accumulation of debris behind barriers. (d) Image captured of the
+condition of the blocked drainage pipe and corrosion within the concrete layers.
+
+FIGURE 6. First-person view photos collected during autonomous
+inspection. Our quadrotor successfully avoided small obstacles,
+demonstrating the robustness of the navigation system.
+
+FIGURE 7. Comparison of photos collected at the same inspection points
+during human-in-the-loop inspection and autonomous inspection. (a)
+Images collected during human-in-the-loop inspection. (b) Images
+collected during autonomous inspection.
+
+recorded during the human-in-the-loop phase, following the
+shortest path to collect data. Additionally, it successfully
+
+TABLE 3. Camera Poses and Overlap of Image Pairs in Fig. 7
+
+Image
+
+Pose (x, y, z in m; pitch, roll, yaw in rad)
+
+IoU
+
+(a1)
+(b1)
+
+(a2)
+
+(b2)
+
+(a3)
+(b3)
+
+(23.23, 3.77, -0.32; 1.106, 0.031, 0.743)
+(23.20, 3.80, -0.34; 1.118, 0.013, 0.553)
+
+(19.65, -6.58, -4.66; 0.409, -0.043, -1.590)
+
+(19.52, -6.60, -4.72; 0.394, -0.036, -1.647)
+
+(16.81, -6.62, -2.31; 0.440, -0.007, -2.980)
+(16.80, -6.61, -2.31; 0.427, -0.007, -2.993)
+
+0.884
+
+0.806
+
+0.901
+
+avoided small obstacles (e.g.,
+thin tree branches) in the
+environment (see Fig. 6), demonstrating the robustness of
+its onboard real-time navigation system. Furthermore, by
+leveraging the relocalization functionality of the localiza-
+tion module (Sec. 1), the inspection target photos collected
+during both the human-in-the-loop and autonomous phases
+(conducted 17 days apart) remain visually consistent, as
+illustrated in Fig. 7. For each image pair shown in Fig. 7,
+we analyze the corresponding camera pose (position and
+orientation) and compute the image overlap to quantita-
+tively assess the system’s ability to accurately repeat the
+inspection task. The image overlap is estimated through a
+
+8
+
+VOLUME ,
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+takeoff and landing point(b)(c)(d)(a)bdcwire ropesaccumulationof debrisdrainage pipeconcrete layersthe flighttrajectory during human-in-the-loop inspectionthe flighttrajectory during autonomous inspectionthe inspection pointsthin treebranchesthin treebranchesthin treebrancheswith leaves(a)(b)(c)(a1)(a2)(a3)(b1)(b2)(b3)
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+<Society logo(s) and publication title will appear here.>
+
+FIGURE 8. Overview of the quadrotor inspection system in landslide task. (a) Point cloud map constructed during the inspection. (b) Image captured of
+the surface characteristics of the landslide. (c-d) Image captured of the condition of the ruins.
+
+2D homography transformation that aligns the autonomous
+inspection image with the corresponding human-in-the-loop
+image, providing a direct measure of alignment at the image
+level and serving as an indicator of visual consistency
+between the two inspection phases. As presented in Table 3,
+the differences in camera pose across the image pairs are
+minimal, highlighting the high control precision of the inte-
+grated planning and control (IPC) framework in our system.
+the high image overlap values (e.g., 0.884,
+Meanwhile,
+0.901) provide strong evidence that our LiDAR-based UAV
+inspection system can reliably and accurately revisit and
+align with prior viewpoints, even after significant temporal
+gaps, demonstrating robustness to environmental changes.
+Notably, when certain inspection points were obstructed by
+fallen branches or leaves, the quadrotor employed a breadth-
+first search algorithm to identify the nearest Known Free
+point for hovering (Sec. 3).
+
+Through efficient quadrotor inspection, our LiDAR-based
+quadrotor captures real-time slope conditions, enabling
+timely identification of safety hazards and supporting main-
+tenance efforts. We invite the readers to watch our first
+supplementary video6, to gain a clearer view of the efficiency
+and flexibility of the quadrotor.
+
+B. Inspection for Landslide Task
+On June 16, 2024, Pingyuan County in Guangdong Province,
+China, characterized by hilly terrain, experienced an extreme
+rainfall event7. This severe weather led to natural disasters
+such as landslides and floods, causing significant casual-
+ties and property damage. We deployed our quadrotor in
+Sishui Township, the most severely affected area, to inspect
+landslide surfaces and evaluate the condition of damaged
+residential structures. The disaster site featured loose debris
+and unstable ground, demanding precise and reliable UAV
+operation to ensure safety and to support ongoing recovery
+efforts. An overview of the inspection process is illustrated
+in Fig. 8, which includes (a) the point cloud map constructed
+during the flight, (b) an image depicting the surface charac-
+teristics of the landslide, and (c-d) images documenting the
+condition of the ruins.
+
+The affected terrain featured a relatively open layout,
+but with scattered debris and unstable surfaces that posed
+challenges for consistent low-altitude flight. In such envi-
+ronments, the use of LiDAR as the primary sensor offered
+significant advantages:
+its long-range and high-precision
+distance measurements enabled accurate terrain mapping
+
+7https://news.cctv.com/2024/06/21/ARTIKUnHB6cYSIS0idoFnrVb2406-
+
+6https://youtu.be/irb lL9NQJU
+
+21.shtml
+
+VOLUME ,
+
+9
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+takeoff and landing point(b)(c)(d)(a)bdclandslideruinsruinsthe flight trajectory during human-in-the-loop inspectionthe flight trajectory during autonomous inspectionthe inspection points
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+:
+
+TABLE 4. Flight Data for the Landslide Inspection Task
+
+Inspection Mode
+
+Human-in-the-loop
+
+Autonomous
+
+Inspection Date
+
+2024-09-26
+
+2024-09-26
+
+Max. Speed (m/s)
+
+Avg. Speed (m/s)
+
+Trajectory Length (m)
+
+Flight Time (min : sec)
+
+2.43
+
+1.00
+
+276.75
+
+4 : 36
+
+2.21
+
+0.96
+
+238.97
+
+4 : 08
+
+FIGURE 9. First-person view photos collected during autonomous
+inspection. Our quadrotor successfully avoided small obstacles,
+demonstrating the robustness of the navigation system.
+
+even at higher altitudes, reducing the risk of close-proximity
+flight. Autonomous flight further minimized human exposure
+while ensuring systematic and repeatable data collection. As
+summarized in Table 4, autonomous flight achieved a modest
+reduction in trajectory length (14%) and flight time (10%),
+as the open terrain limited the potential for optimization.
+Nevertheless, the system effectively avoided small scattered
+obstacles, such as broken tree branches and thin wire (Fig. 9),
+without compromising navigation safety or data quality. This
+capability is largely attributed to the IPC framework, which
+leverages convex corridor constraints and high-frequency
+model predictive control to maintain highly responsive and
+collision-free flight even in partially cluttered environments.
+
+FIGURE 10. Comparison of photos collected at the same inspection
+points during human-in-the-loop inspection and autonomous inspection.
+(a) Images collected during human-in-the-loop inspection. (b) Images
+collected during autonomous inspection.
+
+TABLE 5. Camera Poses and Overlap of Image Pairs in Fig. 10
+
+Image
+
+Pose (x, y, z in m; pitch, roll, yaw in rad)
+
+IoU
+
+(a1)
+(b1)
+
+(a2)
+
+(b2)
+
+(a3)
+(b3)
+
+(40.61, -4.62, 2.39; 0.677, 0.135, 0.542)
+(40.66, -4.63, 2.34; 0.782, 0.132, 0.596)
+
+(21.64, -21.43, -2.73; 0.478, 0.161, 0.775)
+
+(21.61, -21.43, -2.72; 0.569, 0.174, 0.723)
+
+(22.53, -29.71, -3.17; 0.499, 0.016, -0.231)
+(22.52, -29.72, -3.16; 0.418, 0.010, -0.222)
+
+0.982
+
+0.928
+
+0.836
+
+inspection point similarity between image pairs. The point
+cloud (Fig.8(a)) and corresponding image captures supported
+post-disaster evaluation, including the identification of struc-
+tural damage and subsequent restoration efforts. Readers are
+encouraged to view the second supplementary video8 for a
+full demonstration.
+
+C. Inspection for Agriculture Task
+Our agricultural inspection focused on a pomelo orchard in
+Meizhou, Guangdong Province, China, known as the “home-
+town of pomelo”9. The orchard is situated in Changtian
+Township, Pingyuan County, characterized by hilly terrain,
+dense vegetation, and steep slopes. The primary objectives
+of this agricultural inspection task were to evaluate weed
+conditions beneath the pomelo trees (Fig. 11(b) and Fig.
+11(d)) and assess the growth status of the pomelo (Fig. 11(c)
+and Fig. 11(d)).
+
+TABLE 6. Flight Data for the Agriculture Inspection Task
+
+Inspection Mode
+
+Human-in-the-loop
+
+Autonomous
+
+Inspection Date
+
+2024-09-25
+
+2024-09-25
+
+Max. Speed (m/s)
+
+Avg. Speed (m/s)
+
+Trajectory Length (m)
+
+Flight Time (min : sec)
+
+2.26
+
+0.54
+
+128.60
+
+3 : 58
+
+2.20
+
+0.82
+
+92.52
+
+1 : 53
+
+As shown in Table 6, the autonomous flight significantly
+improved operational efficiency, reducing trajectory length
+by 28% and flight time by 53%. These gains are mainly
+attributed to the use of the IPC module during the au-
+tonomous inspection phase. In the frontend, the A* algorithm
+efficiently searches the shortest collision-free path between
+two inspection points based on the local map. This path is
+then refined in the backend by a model predictive controller,
+which smooths it
+into a dynamically feasible trajectory
+while ensuring real-time obstacle avoidance. IPC enables
+the quadrotor to maintain precise and efficient motion even
+in densely vegetated orchards. In contrast, human pilots
+operating under manual control and visual feedback often
+struggle to respond accurately to narrow gaps, thin branches,
+or irregular tree spacing, which frequently leads to abrupt
+maneuvers and inefficient trajectories.
+
+TABLE 7. Camera Poses and Overlap of Image Pairs in Fig. 13
+
+Image
+
+Pose (x, y, z in m; pitch, roll, yaw in rad)
+
+IoU
+
+(a1)
+(b1)
+
+(a2)
+(b2)
+
+(a3)
+(b3)
+
+(3.91, -1.36, 0.35; 0.006, -0.036, -1.338)
+(3.89, -1.36, 0.27; 0.005, -0.058, -1.343)
+
+(22.06, 0.45, -1.24; 0.077, -0.015, 0.451)
+(22.06, 0.47, -1.23; 0.081, 0.012, 0.391)
+
+(24.59, -1.66, -2.30; -0.520, -0.048, -1.791)
+(24.58, -1.65, -2.28; -0.527, -0.057, -1.821)
+
+0.923
+
+0.948
+
+0.926
+
+Inspection photos (Fig. 10) collected under both modes
+remained highly consistent, owing to the system’s accurate
+relocalization capabilities (Sec. 1). This consistency is fur-
+ther supported by the camera pose alignment and overlap
+metrics reported in Table 5, which quantitatively evaluate the
+
+The dense environment presented frequent small obstacles,
+such as thin tree branches and low-hanging leaves. As
+
+8https://youtu.be/tDQllM3uo18
+9https://en.wikipedia.org/wiki/Meizhou#Food
+
+10
+
+VOLUME ,
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+(a)(b)(c)thin treebranchesthin wiresthin tree brancheswith leaves(a1)(a2)(a3)(b1)(b2)(b3)
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+<Society logo(s) and publication title will appear here.>
+
+FIGURE 11. Overview of the quadrotor inspection system in agriculture task. (a) Point cloud map constructed during the inspection. (c) Image captured
+of the weed conditions beneath the pomelo trees. (d) Image captured of the weed conditions beneath the pomelo trees and the pomelo’s growth status.
+
+FIGURE 12. First-person view photos collected during autonomous
+inspection. Our quadrotor successfully avoided small obstacles,
+demonstrating the robustness of the navigation system.
+
+spection points with high spatial and directional consistency.
+These capabilities support reliable and timely monitoring of
+crop conditions and weed presence. A full demonstration of
+this task is available in our third supplementary video10.
+
+D. Inspection for Factory Task
+
+TABLE 8. Flight Data for the Factory Inspection Task
+
+Inspection Mode
+
+Human-in-the-loop
+
+Autonomous
+
+Inspection Date
+
+2024-09-24
+
+2024-09-24
+
+Max. Speed (m/s)
+
+Avg. Speed (m/s)
+
+Trajectory Length (m)
+
+Flight Time (min : sec)
+
+2.19
+
+1.06
+
+319.10
+
+5 : 01
+
+2.18
+
+1.02
+
+229.66
+
+3 : 45
+
+FIGURE 13. Comparison of photos collected at the same inspection
+points during human-in-the-loop inspection and autonomous inspection.
+(a) Images collected during human-in-the-loop inspection. (b) Images
+collected during autonomous inspection.
+
+illustrated in Fig. 12, the quadrotor was able to consistently
+avoid these small obstacles while maintaining stable flights,
+highlighting the effectiveness of the onboard obstacle avoid-
+ance system and high-resolution LiDAR-based mapping. To
+further evaluate inspection repeatability, Fig.13 compares
+images collected at the same inspection points during the
+human-in-the-loop and autonomous phases. The correspond-
+ing camera poses and overlap values are reported in Table 7,
+quantitatively confirming the system’s ability to revisit in-
+
+The factory inspection task involved navigating a furniture
+production site with both open storage zones and cluttered
+processing areas (Fig. 14). Our goal was to assess equipment
+status (Fig. 14(b) and Fig. 14(c)) and product storage (Fig.
+14(d)).
+
+In this experiment, our quadrotor executed the complete
+inspection workflow in a semi-structured factory environ-
+ment. A summary of the recorded flight data is provided in
+Table 8. While the maximum flight speeds were comparable
+across both inspection modes, the autonomous inspection
+achieved a 28% reduction in trajectory length and a 25%
+
+10https://youtu.be/pTsQbbMZJy4
+
+VOLUME ,
+
+11
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+takeoff and landing point(b)(c)(d)(a)bdcweed conditionsweed conditionspomelopomeloesthe flighttrajectory during human-in-the-loop inspectionthe flighttrajectory during autonomous inspectionthe inspection points(a)(b)(c)thin treebranchesthin tree brancheswith leavesthin tree brancheswith leaves(a1)(a2)(a3)(b1)(b2)(b3)
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+:
+
+FIGURE 14. Overview of the quadrotor inspection system in factory task. (a) Point cloud map constructed during the inspection. (b-c) Image captured
+of the operational status of equipment in the processing area. (d) Image captured of the storage conditions of products in the storage area.
+
+TABLE 9. Camera Poses and Overlap of Image Pairs in Fig. 15
+
+Image
+
+Pose (x, y, z in m; pitch, roll, yaw in rad)
+
+IoU
+
+(a1)
+(b1)
+
+(a2)
+(b2)
+
+(a3)
+(b3)
+
+(13.64, 47.86, 0.85; 0.372, -0.029, -2.705)
+(13.65, 47.85, 0.87; 0.351, -0.015, -2.737)
+
+(30.90, 41.71, 0.83; 1.153, -0.019, 0.100)
+(30.90, 41.70, 0.89; 1.144, -0.020, 0.078)
+
+(23.82, 36.51, 0.52; 0.582, 0.096, -2.892)
+(23.82, 36.50, 0.48; 0.579, -0.018, -2.920)
+
+0.935
+
+0.892
+
+0.983
+
+FIGURE 15. Comparison of photos collected at the same inspection
+points during human-in-the-loop inspection and autonomous inspection.
+(a) Images collected during human-in-the-loop inspection. (b) Images
+collected during autonomous inspection.
+
+reduction in flight time, reflecting more efficient path plan-
+ning and fewer unnecessary maneuvers in constrained indoor
+spaces.
+
+As shown in Fig. 14, the quadrotor autonomously revisited
+inspection points previously defined during the human-in-
+the-loop phase, executing near-optimal paths for data col-
+lection. Thanks to the system’s high-precision relocalization
+capabilities (Sec. 1), the visual observations across modes
+exhibit strong spatial consistency. This is quantitatively
+
+supported by the high overlap values reported in Table 9,
+with representative image comparisons presented in Fig.
+15. Overall, the system demonstrated its ability to operate
+effectively in structured indoor environments with complex
+spatial constraints. A full demonstration of this inspection
+task is provided in our fourth supplementary video11.
+
+E. Inspection for Forestry Task
+Finally, we conducted the inspection task in a forest envi-
+ronment. The primary objective of this forestry inspection
+task was to assess the growth status of the trees (Fig. 16).
+
+11https://youtu.be/h1ToZjvdV8s
+
+12
+
+VOLUME ,
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+takeoff and landing point(b)(c)(d)(a)bdcequipmentequipmentstorage warehousethe flighttrajectory during human-in-the-loop inspectionthe flighttrajectory during autonomous inspectionthe inspection points(a1)(a2)(a3)(b1)(b2)(b3)
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+<Society logo(s) and publication title will appear here.>
+
+FIGURE 16. Overview of the quadrotor inspection system in forestry task. (a) Point cloud map constructed during the inspection. (b-d) Image captured
+of the growth status of the trees.
+
+TABLE 10. Flight Data for the Forestry Inspection Task
+
+Inspection Mode
+
+Human-in-the-loop
+
+Autonomous
+
+Inspection Date
+
+2024-09-10
+
+2024-09-15
+
+Max. Speed (m/s)
+
+Avg. Speed (m/s)
+
+Trajectory Length (m)
+
+Flight Time (min : sec)
+
+2.25
+
+0.84
+
+257.74
+
+5 : 06
+
+2.20
+
+1.23
+
+173.88
+
+2 : 21
+
+TABLE 11. Camera Poses and Overlap of Image Pairs in Fig. 17
+
+Image
+
+Pose (x, y, z in m; pitch, roll, yaw in rad)
+
+IoU
+
+(a1)
+
+(b1)
+
+(a2)
+(b2)
+
+(a3)
+(b3)
+
+(25.64, 16.96, 3.82; -0.005, 0.002, 0.467)
+
+(25.66, 16.94, 3.72; -0.006, -0.027, 0.452)
+
+(30.75, 25.66, 4.43; 0.027, 0.004, 1.118)
+(30.74, 25.66, 4.40; 0.013, -0.032, 1.154)
+
+(19.66, -4.65, 3.08; 0.031, -0.039, -2.840)
+(19.65, -4.65, 3.10; 0.012, 0.006, -2.867)
+
+0.883
+
+0.919
+
+0.923
+
+The quadrotor successfully completed the full inspection
+workflow. As summarized in Table 10, despite similar max-
+imum flight speeds across both phases,
+the autonomous
+inspection achieved a 33% reduction in trajectory length
+
+FIGURE 17. Comparison of photos collected at the same inspection
+points during human-in-the-loop inspection and autonomous inspection.
+(a) Images collected during human-in-the-loop inspection. (b) Images
+collected during autonomous inspection.
+
+and a 54% reduction in flight time compared to the human-
+in-the-loop phase. By leveraging the relocalization module
+(Sec.1), the system consistently revisited the intended in-
+spection points with high spatial accuracy. Fig. 17 presents
+representative image pairs collected at the same inspection
+points under both modes, and Table 11 reports the corre-
+sponding camera poses and overlap values, indicating strong
+alignment. This capability enabled accurate and repeatable
+monitoring of the forest’s status and the early detection of
+structural anomalies such as leaning trees or canopy gaps. We
+
+VOLUME ,
+
+13
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+takeoff and landing point(b)(c)(d)(a)bdcthe flighttrajectory during human-in-the-loop inspectionthe flighttrajectory during autonomous inspectionthe inspection points(a1)(a2)(a3)(b1)(b2)(b3)
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+:
+
+encourage readers to view our fifth supplementary video12
+for a detailed demonstration of the quadrotor performing the
+forestry inspection task.
+
+robustness under challenging conditions, enhancing sensing
+reliability through multi-sensor fusion, and extending the
+system’s applicability to more dynamic and complex envi-
+ronments.
+
+V. CONCLUSION
+This paper introduces a LiDAR-based quadrotor inspec-
+tion system designed to perform various tasks in cluttered,
+unstructured, and GNSS-denied environments. The system
+operates in two phases: human-in-the-loop inspection and
+autonomous inspection, effectively integrating the capabil-
+ities of untrained pilots with an autonomous quadrotor to
+achieve efficient inspection task execution. The main features
+of this system include its capability to be operated by
+untrained pilots and its ability to autonomously conduct
+inspection tasks in diverse, unknown, GNSS-denied, and
+cluttered environments.
+
+Extensive field experiments conducted in diverse envi-
+ronments, including slopes, landslides, factories, agricultural
+areas, and forests, validate the reliability and adaptability of
+the system. Our quadrotor, featuring a wheelbase of 320 mm
+and a total weight of 2 kg, provides a stable and lightweight
+platform capable of agile flight in complex and GNSS-denied
+environments. Results reveal significant enhancements in au-
+tonomous inspection efficiency, with reductions in trajectory
+length by up to 40% and flight time by 57% compared
+to human-in-the-loop inspection. These gains are primarily
+attributed to the system’s software capabilities, which enable
+effective relocalization, inspection points optimization and
+reliable obstacle avoidance. Notably, in the slope inspection
+task, the autonomous flight was executed 17 days after the
+human-in-the-loop phase, yet the system was still able to
+accurately revisit
+the designated targets, underscoring its
+robustness to temporal variations. Across all test scenarios,
+the system achieved high spatial and directional consistency,
+with image overlaps between the two phases exceeding 0.80
+in most cases and reaching up to 0.982. The system’s ability
+to autonomously avoid obstacles and collect high-quality
+inspection data further underscores its practicality for real-
+world applications.
+
+Despite these promising results, the system has several
+limitations. It is currently designed for repeated inspection
+in previously explored areas and may not adapt well to
+entirely unknown environments that require real-time task
+generation and dynamic planning. The manual specification
+of inspection targets during the human-in-the-loop phase
+may also limit scalability in large or time-critical scenar-
+ios. Additionally, while LiDAR performs reliably in clear
+weather, its effectiveness may degrade under adverse weather
+conditions such as heavy rain or fog. Lastly, the system lacks
+semantic understanding of the environment, which could
+further enhance the relevance and autonomy of inspection
+decisions.
+
+Future efforts will aim to address these limitations by
+enabling adaptive and semantic-aware inspection, improving
+
+12https://youtu.be/-Djl8- 2QCY
+
+ACKNOWLEDGMENT
+The authors gratefully acknowledge DJI for financial support
+and Livox Technology for equipment support during the
+project. This project work was funded by the Hong Kong
+Research Grants Council (RGC) General Research Fund
+(GRF) grant 17205924. Special thanks are extended to Gui-
+Tian Xiao, Fushan Liu, and Guilu Xiao for their invaluable
+assistance with the experiments and for offering access to
+the experimental sites.
+
+REFERENCES
+[1] S. Jordan, J. Moore, S. Hovet, J. Box, J. Perry, K. Kirsche, D. Lewis,
+and Z. T. H. Tse, “State-of-the-art technologies for uav inspections,”
+IET Radar, Sonar & Navigation, vol. 12, no. 2, pp. 151–164, 2018.
+
+[2] N. Bolourian and A. Hammad, “Lidar-equipped uav path planning
+considering potential locations of defects for bridge inspection,” Au-
+tomation in Construction, vol. 117, p. 103250, 2020.
+
+[3] Q. Du, W. Dong, W. Su, and Q. Wang, “Uav inspection technology
+and application of transmission line,” in 2022 IEEE 5th International
+Conference on Information Systems and Computer Aided Education
+(ICISCAE).
+
+IEEE, 2022, pp. 594–597.
+
+[4] P. Velusamy, S. Rajendran, R. K. Mahendran, S. Naseer, M. Shafiq, and
+J.-G. Choi, “Unmanned aerial vehicles (uav) in precision agriculture:
+Applications and challenges,” Energies, vol. 15, no. 1, p. 217, 2021.
+[5] F. Betti Sorbelli, “Uav-based delivery systems: a systematic review,
+trends, and research challenges,” Journal on Autonomous
+
+current
+Transportation Systems, vol. 1, no. 3, pp. 1–40, 2024.
+
+[6] M. Lyu, Y. Zhao, C. Huang, and H. Huang, “Unmanned aerial vehicles
+for search and rescue: A survey,” Remote Sensing, vol. 15, no. 13, p.
+3266, 2023.
+
+[7] H. Ren, Y. Zhao, W. Xiao, and Z. Hu, “A review of uav monitoring
+in mining areas: Current status and future perspectives,” International
+Journal of Coal Science & Technology, vol. 6, pp. 320–333, 2019.
+[8] W. Liu, Y. Ren, R. Guo, V. W. Kong, A. S. Hung, F. Zhu, Y. Cai,
+Y. Zou, and F. Zhang, “Lidar-based quadrotor for slope inspection in
+dense vegetation,” arXiv preprint arXiv:2409.13985, 2024.
+
+[9] 2022, retrieved: February 27, 2024, from https://www.flyability.com.
+[10] 2021, retrieved: February 27, 2024, from https://cleorobotics.com.
+[11] 2022, retrieved: February 27, 2024, from https://www.dji.com.
+[12] 2022,
+
+retrieved:
+
+February
+
+2024,
+
+27,
+
+from
+
+https://www.skydio.com/skydio-2-plus-enterprise.
+
+[13] S. Jung, S. Song, S. Kim, J. Park, J. Her, K. Roh, and H. Myung, “To-
+ward autonomous bridge inspection: A framework and experimental
+results,” in 2019 16th International Conference on Ubiquitous Robots
+(UR).
+
+IEEE, 2019, pp. 208–211.
+
+[14] M. M. Santos, P. M. Pinheiro, I. Maurell, L. Soares, J. Nam-Jr, P. E.
+Nunes, E. Evangelista, V. V. Maurente, C. B. Costa, E. N. Borges et al.,
+“Unmanned aerial systems for indoor inspection in industrial sites:
+System architecture, sensors, and simulation techniques,” in 2023 Latin
+American Robotics Symposium (LARS), 2023 Brazilian Symposium on
+Robotics (SBR), and 2023 Workshop on Robotics in Education (WRE).
+IEEE, 2023, pp. 101–106.
+
+[15] H. Guan, X. Sun, Y. Su, T. Hu, H. Wang, H. Wang, C. Peng, and
+Q. Guo, “Uav-lidar aids automatic intelligent powerline inspection,”
+International Journal of Electrical Power & Energy Systems, vol. 130,
+p. 106987, 2021.
+
+[16] S. Omari, P. Gohl, M. Burri, M. Achtelik, and R. Siegwart, “Visual
+industrial inspection using aerial robots,” in Proceedings of the 2014
+3rd International Conference on Applied Robotics for the Power
+Industry.
+
+IEEE, 2014, pp. 1–5.
+
+[17] R. B. Grando, P. M. Pinheiro, N. P. Bortoluzzi, C. B. da Silva, O. F.
+Zauk, M. O. Pi˜neiro, V. M. Aoki, A. L. Kelbouscas, Y. B. Lima, P. L.
+Drews et al., “Visual-based autonomous unmanned aerial vehicle for
+
+14
+
+VOLUME ,
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+
+This article has been accepted for publication in IEEE Transactions on Field Robotics. This is the author's version which has not been fully edited and
+
+content may change prior to final publication. Citation information: DOI 10.1109/TFR.2025.3604716
+
+<Society logo(s) and publication title will appear here.>
+
+inspection in indoor environments,” in 2020 Latin American Robotics
+Symposium (LARS), 2020 Brazilian Symposium on Robotics (SBR) and
+2020 Workshop on Robotics in Education (WRE).
+IEEE, 2020, pp.
+1–6.
+
+[18] J. Nikolic, M. Burri, J. Rehder, S. Leutenegger, C. Huerzeler, and
+R. Siegwart, “A uav system for inspection of industrial facilities,” in
+2013 IEEE Aerospace Conference.
+
+IEEE, 2013, pp. 1–8.
+
+[19] W. Xu, Y. Cai, D. He, J. Lin, and F. Zhang, “Fast-lio2: Fast direct lidar-
+inertial odometry,” IEEE Transactions on Robotics, vol. 38, no. 4, pp.
+2053–2073, 2022.
+
+[20] Y. Ren, Y. Cai, F. Zhu, S. Liang, and F. Zhang, “Rog-map: An efficient
+robocentric occupancy grid map for large-scene and high-resolution
+lidar-based motion planning,” arXiv preprint arXiv:2302.14819, 2023.
+[21] W. Liu, Y. Ren, and F. Zhang, “Integrated planning and control for
+quadrotor navigation in presence of suddenly appearing objects and
+disturbances,” IEEE Robotics and Automation Letters, 2023.
+
+[22] Y. Cai, W. Xu, and F. Zhang, “ikd-tree: An incremental kd tree for
+robotic applications,” arXiv preprint arXiv:2102.10808, 2021.
+[23] D. Mellinger and V. Kumar, “Minimum snap trajectory generation
+and control for quadrotors,” in 2011 IEEE international conference
+on robotics and automation.
+
+IEEE, 2011, pp. 2520–2525.
+
+[24] M. J¨unger, G. Reinelt, and G. Rinaldi, “The traveling salesman
+problem,” Handbooks in operations research and management science,
+vol. 7, pp. 225–330, 1995.
+
+[25] Z. Meng, H. Qin, Z. Chen, X. Chen, H. Sun, F. Lin, and M. H. Ang, “A
+two-stage optimized next-view planning framework for 3-d unknown
+environment exploration, and structural reconstruction,” IEEE Robotics
+and Automation Letters, vol. 2, no. 3, pp. 1680–1687, 2017.
+
+[26] X. H. Shi, Y. C. Liang, H. P. Lee, C. Lu, and Q. Wang, “Particle
+swarm optimization-based algorithms for tsp and generalized tsp,”
+Information processing letters, vol. 103, no. 5, pp. 169–176, 2007.
+
+[27] M. Deudon, P. Cournut, A. Lacoste, Y. Adulyasak, and L.-M.
+Rousseau, “Learning heuristics for the tsp by policy gradient,” in
+Integration of Constraint Programming, Artificial Intelligence, and
+Operations Research: 15th International Conference, CPAIOR 2018,
+Delft, The Netherlands, June 26–29, 2018, Proceedings 15. Springer,
+2018, pp. 170–181.
+
+[28] B. Zhou, Y. Zhang, X. Chen, and S. Shen, “Fuel: Fast uav exploration
+using incremental frontier structure and hierarchical planning,” IEEE
+Robotics and Automation Letters, vol. 6, no. 2, pp. 779–786, 2021.
+
+[29] B. Zhou, H. Xu, and S. Shen, “Racer: Rapid collaborative explo-
+ration with a decentralized multi-uav system,” IEEE Transactions on
+Robotics, vol. 39, no. 3, pp. 1816–1835, 2023.
+
+[30] K. Helsgaun, “An effective implementation of the lin–kernighan trav-
+eling salesman heuristic,” European journal of operational research,
+vol. 126, no. 1, pp. 106–130, 2000.
+
+[31] P. E. Hart, N. J. Nilsson, and B. Raphael, “A formal basis for the
+heuristic determination of minimum cost paths,” IEEE transactions
+on Systems Science and Cybernetics, vol. 4, no. 2, pp. 100–107, 1968.
+[32] P. J. Besl and N. D. McKay, “Method for registration of 3-d shapes,”
+in Sensor fusion IV: control paradigms and data structures, vol. 1611.
+Spie, 1992, pp. 586–606.
+
+[33] S. Liu, M. Watterson, K. Mohta, K. Sun, S. Bhattacharya, C. J.
+Taylor, and V. Kumar, “Planning dynamically feasible trajectories for
+quadrotors using safe flight corridors in 3-d complex environments,”
+IEEE Robotics and Automation Letters, vol. 2, no. 3, pp. 1688–1695,
+2017.
+
+[34] B. Zhou, Z. Tang, K. Qian, F. Fang, and X. Ma, “A lidar odometry for
+outdoor mobile robots using ndt based scan matching in gps-denied
+environments,” in 2017 IEEE 7th annual international conference
+on cyber technology in automation, control, and intelligent systems
+(CYBER).
+
+IEEE, 2017, pp. 1230–1235.
+
+[35] L. Huang, “Review on lidar-based slam techniques,” in 2021 Interna-
+tional conference on signal processing and machine learning (CONF-
+SPML).
+
+IEEE, 2021, pp. 163–168.
+
+[36] DJI, “Dji m30 series technical specs,” 2025. [Online]. Available:
+
+https://enterprise.dji.com/cn/matrice-30/specs
+
+[37] I. Skydio, “Skydio x10 technical specs,” 2025. [Online]. Available:
+
+https://www.skydio.com/x10/technical-specs
+
+VOLUME ,
+
+15
+
+Authorized licensed use limited to: South China Normal University. Downloaded on October 01,2025 at 03:58:57 UTC from IEEE Xplore.  Restrictions apply.
+
+© 2025 IEEE. All rights reserved, including rights for text and data mining and training of artificial intelligence and similar technologies. Personal use is permitted,
+
+but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
