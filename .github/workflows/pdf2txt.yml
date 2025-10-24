@@ -1,0 +1,74 @@
+---
+name: PDF to TXT Conversion
+
+'on':
+  # Trigger on push to PDF files in target folders
+  push:
+    paths:
+      - 'main paper/*.pdf'
+      - 'main paper/**/*.pdf'
+      - 'branch paper/*.pdf'
+      - 'branch paper/**/*.pdf'
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+# Required permissions to commit back to the repository
+permissions:
+  contents: write
+
+jobs:
+  convert-pdfs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history to allow commits
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pdfminer.six
+        run: |
+          python -m pip install --upgrade pip
+          pip install pdfminer.six
+
+      - name: Run PDF to TXT conversion
+        run: |
+          python tools/pdf2txt.py "main paper" "branch paper"
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          # Check if there are any changes to commit
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No changes to commit"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Changes detected"
+          fi
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Configure git
+          git config --local user.email \
+            "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Add only .txt files
+          git add "*.txt" || true
+          git add "main paper/*.txt" || true
+          git add "branch paper/*.txt" || true
+
+          # Commit with descriptive message
+          git commit -m "Auto-convert PDFs to TXT [skip ci]" || exit 0
+
+          # Push changes
+          git push

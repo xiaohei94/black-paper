@@ -1,0 +1,1022 @@
+IEEE ROBOTICS AND AUTOMATION LETTERS, VOL. 10, NO. 4, APRIL 2025
+
+3851
+
+Flying in Highly Dynamic Environments With
+End-to-End Learning Approach
+
+Xiyu Fan, Minghao Lu , Graduate Student Member, IEEE, Bowen Xu , and Peng Lu , Member, IEEE
+
+Abstract—Obstacle avoidance for autonomous aerial vehicles
+like quadrotors is a popular research topic. Most existing research
+focuses only on static environments, and obstacle avoidance in en-
+vironments with multiple dynamic obstacles remains challenging.
+This letter proposes a novel deep-reinforcement learning-based
+approach for the quadrotors to navigate through highly dynamic
+environments. We propose a lidar data encoder to extract obstacle
+information from the massive point cloud data from the lidar. Multi
+frames of historical scans will be compressed into a 2-dimension
+obstacle map while maintaining the obstacle features required. An
+end-to-end deep neural network is trained to extract the kinematics
+of dynamic and static obstacles from the obstacle map, and it will
+generate acceleration commands to the quadrotor to control it to
+avoid these obstacles. Our approach contains perception and navi-
+gating functions in a single neural network, which can change from
+a navigating state into a hovering state without mode switching. We
+also present simulations and real-world experiments to show the
+effectiveness of our approach while navigating in highly dynamic
+cluttered environments.
+
+Index Terms—Aerial
+
+systems, perception and autonomy,
+
+reinforcement learning, autonomous vehicle navigation.
+
+I. INTRODUCTION
+
+A UTONOMOUS Aerial Vehicles (AAVs), particularly
+
+quadrotors, have ushered in a new era of possibilities
+across diverse applications in recent years, such as photogra-
+phy, logistics, and exploration [1], [2], [3]. Quadrotors have
+emerged as the predominant choice among AAVs owing to their
+adaptability and agility. Nevertheless, maneuvering quadrotors
+in cluttered environments typically demands the expertise of a
+skilled human pilot, leading to additional training requirements.
+Moreover, human response times can limit the full potential of
+quadrotors.
+
+To address these challenges, autonomous obstacle avoidance
+techniques have been introduced. By integrating sensors like
+
+Received 19 November 2024; accepted 24 February 2025. Date of publica-
+tion 3 March 2025; date of current version 13 March 2025. This article was
+recommended for publication by Associate Editor Juan Rojas and Editor Jens
+Kober upon evaluation of the reviewers’ comments. This work was supported
+in part by General Research Fund under Grant 17204222, and in part by the
+Seed Fund for Collaborative Research and General Funding Scheme-HKU-TCL
+Joint Research Center for Artiﬁcial Intelligence. (Xiyu Fan and Minghao Lu
+contributed equally to this work.) (Corresponding author: Peng Lu.)
+
+The authors are with the Adaptive Robotic Controls Laboratory, Depart-
+ment of Mechanical Engineering, The University of Hong Kong, Hong Kong
+SAR, China (e-mail: fanxiyu@connect.hku.hk; minghao0@connect.hku.hk;
+link.bowenxu@connect.hku.hk; lupeng@hku.hk).
+
+Video: https://youtu.be/l4kLej8cUsQ.
+This article has
+
+supplementary downloadable material available at
+
+https://doi.org/10.1109/LRA.2025.3547306, provided by the authors.
+
+Digital Object Identiﬁer 10.1109/LRA.2025.3547306
+
+Fig. 1. Our quadrotor ﬂies through a dynamic cluttered environment, which
+contains both static obstacles and randomly walking pedestrians.
+
+depth cameras or lidar, quadrotors can autonomously navigate
+through these environments. State-of-the-art obstacle avoidance
+approaches primarily rely on perception and path planning utiliz-
+ing optimization algorithms [2], [4], ensuring performance but
+often requiring substantial hardware resources for deployment.
+Furthermore, the latency of perception during high-speed ﬂight
+can constrain performance.
+
+In recent years, learning-based approaches have emerged as
+an alternative [5], [6], [7], [8]. Unlike optimization algorithms,
+neural networks are employed for obstacle avoidance, offering
+reduced latency and enabling faster responses compared to
+conventional optimization-based approaches.
+
+However, the majority of current research only focuses on
+static environments. Obstacle avoidance in highly dynamic set-
+tings with fast-moving dynamic obstacles remains a challenge.
+Navigating through such environments not only poses planning
+complexities but also demands effective perception techniques.
+In this letter, we introduce a novel end-to-end learning-based
+approach designed for obstacle avoidance in highly dynamic
+environments, like shown in Fig. 1. Leveraging lidar for per-
+ception, the point cloud data captured by the lidar system is
+transformed into an obstacle map. Our approach employs Deep
+Reinforcement Learning (Deep-RL) to train a neural network
+speciﬁcally tailored for dynamic obstacle evasion.
+
+The observation space of the neural network contains both the
+obstacle map and the current state of the quadrotor. By sending
+acceleration commands to the ﬂight controller, the neural net-
+work directs the quadrotor to navigate and bypass both dynamic
+and static obstacles during ﬂight.
+
+Furthermore, we conduct a series of simulated and real-world
+experiments to compare our framework against the existing
+
+2377-3766 © 2025 IEEE. All rights reserved, including rights for text and data mining, and training of artiﬁcial intelligence and similar technologies.
+Personal use is permitted, but republication/redistribution requires IEEE permission. See https://www.ieee.org/publications/rights/index.html for more information.
+
+Authorized licensed use limited to: South China Normal University. Downloaded on March 21,2025 at 03:34:07 UTC from IEEE Xplore.  Restrictions apply.
+
+
+3852
+
+IEEE ROBOTICS AND AUTOMATION LETTERS, VOL. 10, NO. 4, APRIL 2025
+
+works. Our method showcases reduced response latency in
+comparison to optimization-based approaches, enabling rapid
+reactions to swiftly moving obstacles. In contrast to prevailing
+learning-based techniques, our methodology demonstrates supe-
+rior performance in navigating through cluttered environments
+with a higher density of high-speed dynamic obstacles.
+
+The key contributions of this research are outlined as follows:
+1) We introduce a novel lidar data encoding methodology. By
+compressing 3D point cloud data into a 2D obstacle map,
+our approach encapsulates the contours and dynamics of
+both static and dynamic obstacles.
+
+2) Our work proposes a deep reinforcement learning frame-
+work that incorporates both static and dynamic obstacles
+during the training phase. Our framework enables quadro-
+tors to navigate through highly dynamic environments.
+3) We ﬁrst realize the learning-based end-to-end dynamic
+obstacle avoidance. In contrast to rule-based approaches,
+our system exhibits obviously reduced latency on mobile
+computing platforms, enabling the quadrotor to evade
+high-speed obstacles moving at speeds of up to 6 m/s.
+
+II. RELATED WORK
+
+A. Static Environments Navigation
+
+Various approaches have been proposed to tackle the obstacle
+avoidance problem. In most of the works, real-time obstacle
+avoidance for mobile robots is realized by a two-piece frame-
+work comprised of mapping and planning. [4] ﬁrst realized
+optimization-based planning algorithm for trajectory generation
+of quadrotors. Subsequent research like [2] proposed the integra-
+tion of grid maps and optimization-based planning algorithms to
+facilitate real-time trajectory generation using onboard sensors
+like lidar or depth cameras. The methods enable the AAVs to ﬂy
+in static cluttered environments robustly and avoid some slow-
+moving objects. However, the methods could not perform well
+in cluttered and highly dynamic environments, because their
+planning process did not include the observation and prediction
+of the moving objects.
+
+Learning-based planners satisfy a faster response compared to
+conventional methods. [5] applied imitation learning to achieve
+high-speed ﬂight in cluttered environments with depth cameras.
+In this work, a stated-based teacher policy was trained to ﬂy in
+these environments with pre-calculated waypoints and various
+sensor data. The student policy shared the same action space
+with the teacher policy, but it only had the observation space
+containing depth image, velocity, and attitude data, and it would
+be trained by the teacher policy. This work realized high-agility
+ﬂight in cluttered environments, but it is not compatible with
+highly dynamic environments. [6], [7], [8] also applied similar
+approaches.
+
+B. Dynamic Obstacle Avoidance
+
+In order to satisfy the requirements of navigating in environ-
+ments with dynamic obstacles, researchers have developed some
+new methods. [9], [10] applied image-based algorithm for dy-
+namic obstacle perception, and added the kinematic of dynamic
+
+obstacles into the cost function of the optimization algorithm
+while planning. Such works perform well on fast-moving small
+objects, but due to the limit of image recognition algorithms,
+only speciﬁc objects with distinct characteristics can be tracked,
+which reduces their universality. [11], [12] achieved fast-moving
+object avoidance based on the low latency of the event camera.
+However, event cameras are only sensitive to moving objects,
+making it difﬁcult to fully perceive the information in complex
+environments. To ﬁll these gaps, [13], [14], [15] made further
+contributions to dynamic obstacle avoidance. In these works,
+dynamic obstacles would be segmented from the overall point
+cloud data by cluster algorithm, and a Kalman Filter was adopted
+to estimate the velocity of moving objects. The optimization al-
+gorithm would then generate the trajectory of the AAV according
+to the perception result. However, the point cloud-based dynamic
+perception methods were time-consuming, and the success rate
+would signiﬁcantly decrease when dynamic objects move at a
+high speed. Besides, the classiﬁcation of the dynamic point cloud
+was difﬁcult to formulate by conventional methods, and some
+false detection conditions could not be eliminated. Moreover,
+solving the model predictive control (MPC) and polynomial
+optimization problems would be very time-consuming if the
+problem was very complex.
+
+Furthermore, [16] made contributions to learning-based
+dynamic obstacle avoidance. In this work, a conventional
+optimization-based planner served as the teacher policy, and
+imitation learning was applied to train a neural network as
+a planner, which brought a signiﬁcant decrease in planning
+latency. However, it did not consider the perception of dynamic
+obstacles, and the proposed neural network was designed to
+avoid only a single dynamic obstacle. [17] tailored a pedestrian
+avoidance methodology for ground-based robots, leveraging a
+combination of sensors such as lidar and RGB cameras for
+perception. This research utilized RGB camera and lidar inputs,
+enabling the system to monitor pedestrian movements based
+on a brief historical analysis of lidar data and the kinematic
+details derived from YOLOv3. While this approach proved
+effective for navigating congested environments by detecting
+and avoiding pedestrians, its scope is limited solely to pedestrian
+avoidance and does not extend to evading other categories of
+dynamic obstacles. Analogously, [18] designed a learning-based
+approach for ground-based robot navigation, which also collects
+multiple historical scans for obstacle identiﬁcation. In this work,
+semantic segmentation is applied to separate movable objects
+from the lidar point cloud. However, this work was designed for
+ground robots and relatively static environments, and it is not
+compatible with highly dynamic environments and quadrotors.
+
+III. METHODOLOGY
+
+In this letter, we address the problem of planning the motion
+of a quadrotor to ﬂy safely in highly dynamic environments with
+lidar sensing.
+
+A. Method Overview
+
+Our approach to dynamic obstacle avoidance while ﬂying in
+cluttered environments contains a method for observing static
+
+Authorized licensed use limited to: South China Normal University. Downloaded on March 21,2025 at 03:34:07 UTC from IEEE Xplore.  Restrictions apply.
+
+
+FAN et al.: FLYING IN HIGHLY DYNAMIC ENVIRONMENTS WITH END-TO-END LEARNING APPROACH
+
+3853
+
+Fig. 2. The overall architecture of our system. Raw data from lidar is processed into single-dimension range data, and stacked into a 36 × 36 obstacle map. The
+obstacle map is then fed into the encoder network, and the features extracted by the encoder are fed into the MLP together with the command and quadrotor state
+information. The output of the MLP is the acceleration command of 2 axes.
+
+and dynamic obstacle information from point cloud data, and a
+training strategy to train a neural network with deep reinforce-
+ment learning.
+
+The overall architecture of our method is shown in Fig. 2. The
+input of the system includes point cloud data of the environment,
+a set of vectors indicating the target position related to the
+quadrotor, and the state of the quadrotor including its velocity
+and acceleration command from the network in the last frame.
+The point cloud data will be encoded to compress obstacle infor-
+mation into a single-dimensional array to reduce data volume.
+We stack the compressed historical obstacle information in the
+previous 36 frames into a gray-scale image, and use an image
+encoder to extract the obstacle outlines and kinematic infor-
+mation of dynamic obstacles. Then, a Multi-Layer Perceptron
+(MLP) network is applied to generate horizontal accelerations
+according to the target command, quadrotor state observation,
+and obstacle information, therefore avoiding dynamic and static
+obstacles while navigating to the target position.
+
+B. Lidar Data Encoding
+
+This section introduces a methodology for encoding volu-
+minous point cloud data from lidar into a 2-dimension array
+obstacle map, encompassing information on static and dynamic
+obstacles. This encoded data serves as a component of the input
+of the neural network. The system perceives its surroundings
+through lidar, which furnishes a point cloud dataset comprising
+detected point positions. However, directly feeding this data into
+the neural network is impractical due to its varying size and
+substantial data volume. Let BPk denote the point set obtained
+from lidar in the kth frame. To neutralize the attitude impact of
+the quadrotor, a SO(3) rotation transformation W
+B Tk is applied
+to convert the point cloud data from the body frame B to the
+horizontal global frame W , yielding the transformed point set
+W Pk, and W
+B Tk can be obtained from the onboard attitude
+estimator.
+
+The scanning time of the lidar leads to signiﬁcant delays when
+evading fast-moving dynamic obstacles. It usually takes a lidar
+0.1 seconds to ﬁnish a complete scan, and incomplete scans
+might overlook smaller objects. Therefore, a sliding window is
+employed to process the point data. To be speciﬁc, a dynamic
+
+(cid:2)
+
+i∈[k−j,k]W Pi}.
+set of point clouds ξ is deﬁned, where ξ ⊆ {
+This set retains point cloud data received from the lidar in the
+preceding j frames, ensuring a stable observation of the point
+cloud while maintaining swift responses to rapidly moving small
+obstacles.
+
+, 2πs
+n
+
+For each point pi = (xi, yi, zi) ∈ ξ,
+
+its direction θi =
+arctan xi
+yi relative to the quadrotor can be determined. Here, we
+deﬁne the set of points in direction s as Ps = {pi ∈ ξ | (cid:4)pi(cid:4) <
+dmax, zi ∈ [zmin, zmax], θi ∈ [ 2π(s−1)
+]}, where n is the
+angular resolution while generating the obstacle map, which is
+set to 36, and dmax is the maximum distance that the obstacle
+map presents, which is set to 10 during training and real-world
+deployment. To ﬁlter out the points that do not impede ﬂight,
+like ground and ceiling, only points within the current ﬂight
+level are kept, where zmin = zq − h, and zmax = zq + h. zq is
+the altitude of the quadrotor, and h is the altitude threshold,
+which is set to 1 m in real-world deployment. With the constant
+altitude of the quadrotor, the 3-dimension point cloud data can
+be compressed into a distance vector:
+
+n
+
+(1)
+
+Ds(k) =
+
+O(k) = [D1(k), D2(k), . . ., Dn(k)]T
+min{(cid:4)pi(cid:4), pi ∈ Ps}
+dmax
+Furthermore, if Ps = ∅, we will let Ds(k) = 1. The distance
+vector O(k) contains the distances of the nearest point to ob-
+stacles in each direction, which are denoted as Ds(k). This
+format maintains a constant data size, occupies less storage, and
+provides adequate information for obstacle avoidance.
+
+(2)
+
+Inspired by [17], we use a 2D array to express multi frames
+of lidar scan data. The historical distance vectors in the previous
+m frames can be organized as:
+
+M (k) = [O(k), O(k − 1), . . ., O(k − m)]
+
+(3)
+
+where M (k) constitutes a 2D obstacle map comprising historical
+obstacle data from the above-mentioned frames, and m is set to
+36 during training and real-world deployment. Fig. 3(b) illus-
+trates the obstacle map derived directly from the vector M (k),
+corresponding to the dynamic obstacles depicted in Fig. 3(a).
+The two bands with lower gray levels represent the two dynamic
+obstacles respectively. Similarly, by analyzing these bands, the
+
+Authorized licensed use limited to: South China Normal University. Downloaded on March 21,2025 at 03:34:07 UTC from IEEE Xplore.  Restrictions apply.
+
+
+3854
+
+IEEE ROBOTICS AND AUTOMATION LETTERS, VOL. 10, NO. 4, APRIL 2025
+
+controller in real-world quadrotor deployment. The command
+input C(t) ∈ R2 comes from the user or the higher-level planner,
+representing the horizontal target position relative to the quadro-
+tor. The action A ∈ R2 comprises acceleration commands in the
+horizontal axes, executed by PX4 to adjust the attitude and thrust
+of the quadrotor during real-world deployment.
+
+The reward R is computed through a series of reward func-
+tions based on the state of the quadrotor. Detailed information on
+the design of the reward functions will be stated in the subsequent
+subsection.
+
+2) Reward Function Design: The reward function is de-
+signed to assess the actions of the quadrotor and provide the
+agent with feedback. Each component of the state contributes
+uniquely to the overall reward, inﬂuencing it in distinct ways.
+The velocity reward, denoted as rv(t), serves to constrain the
+velocity of the quadrotor v(t) within a speciﬁed range between
+the maximum velocity vmax and the minimum velocity vmin.
+The computation of the velocity reward can be formulated as:
+
+rv(t) = rv max(t) + rv min(t)
+
+(cid:4)
+
+rv max(t) =
+
+(cid:4)
+
+rv min(t) =
+
+e(cid:4)v(t)(cid:4)−vmax − 1 (cid:4)v(t)(cid:4) > vmax
+(cid:4)v(t)(cid:4) (cid:2) vmax
+0
+
+evmin−(cid:4)v(t)(cid:4) − 1 (cid:4)v(t)(cid:4) < vmin
+(cid:4)v(t)(cid:4) (cid:3) vmin
+0
+
+The progress reward, denoted as rp(t), prompts the quadrotor
+to navigate towards the designated goal position pgoal. The
+computation of the progress reward can be expressed as:
+
+g(t) = (cid:4)pgoal − p(t)(cid:4)
+rp(t) = eg(t)−g(t−1) − 1
+where p(t) is the position of the quadrotor.
+
+The jerk reward, denoted as rj(t), acts as a punishment
+against impractical maneuvers resulting from sudden changes in
+acceleration a(t) of the simulated quadrotor. The computation
+of the jerk reward can be formulated as:
+
+rj(t) = e(cid:4)a(t)−a(t−1)(cid:4) − 1
+The obstacle avoidance reward, denoted as ro(t), plays a cru-
+cial role in penalizing the proximity of the quadrotor to static
+obstacles. Introducing a safety distance ds, we utilize a distance
+function to assess the distance from the quadrotor to obstacles
+at a given position. The computation of the obstacle avoidance
+reward can be expressed as:
+
+(10)
+
+(cid:4)
+
+ro(t) =
+
+eds−d(t) − 1 d(t) (cid:2) ds
+d(t) > ds
+0
+
+(11)
+
+where d(t) is the distance from the quadrotor to the closest point
+on the closest obstacle.
+
+The dynamic obstacle reward, denoted as rd(t), aims to
+prompt the quadrotor to keep out from the future trajectory of
+dynamic obstacles. A dilation ratio ki(t) is employed to amplify
+the distance reward in the direction of movement of the dynamic
+obstacle. Assuming there are n dynamic obstacles within the
+
+(5)
+
+(6)
+
+(7)
+
+(8)
+
+(9)
+
+Fig. 3. The sketch of obstacles and the corresponding obstacle map. (a) shows
+the kinematics of 2 moving objects, and (b) is the corresponding sketch of the
+obstacle map. The area in the obstacle map with higher gray levels represents an
+obstacle closer to the quadrotor. (c) shows the learning curve of the agent using
+the proposed encoded lidar data and the raw lidar data.
+
+kinematics of all dynamic obstacles within the FOV can be
+observed.
+
+In order to validate the effectiveness of our lidar data encoding
+approach, a control group utilizing raw lidar data as input has
+been included while training the agent. Fig. 3(c) illustrates the
+corresponding learning curve, which indicates that our proposed
+lidar data encoding approach leads to quicker convergence and
+achieves signiﬁcantly higher ﬁnal reward values compared to
+the control group.
+
+C. Learning of Dynamic Obstacle Avoidance
+
+In this subsection, we employ deep reinforcement learning
+to train a neural network capable of navigating the quadrotor
+through complex environments replete with dynamic obstacles.
+1) Problem Formulation: The overall strategy involves train-
+ing a universal policy leveraging deep reinforcement learning
+to control the acceleration of the quadrotor to ﬂy through the
+obstacles.
+
+The problem is formulated as a Markov Decision Process
+(MDP), which is a discrete-time stochastic control process. The
+process can be formulated as a quadruple M = (S, A, P, R),
+where S is the state space, A is the action space, P (S, S (cid:5)) is
+the probability that the action of the agent causes the state to
+transform from S to S(cid:5), and R(S, S (cid:5)) is the reward that the
+agent received after the state to transform from S to S (cid:5). The
+reinforcement learning problem aims to adjust the policy π, in
+order to maximize the accumulated reward of the MDP M with
+a discount ratio γ:
+
+GM (t) =
+
+∞(cid:3)
+
+(γkRt+k)
+
+(4)
+
+k=0
+The state S is the combination of the observation O and the en-
+vironment parameters. The observation O ∈ [M (t), S(t), C(t)]
+contains the obstacle map M (t) ∈ R36×36, the state of the
+quadrotor S(t) ∈ R1×4, and the command input C(t) ∈ R1×2.
+The obstacle map M (t) ∈ R36×36 is constructed with multi-
+ple historical lidar scan results, processed through a Residual
+Network (ResNet) encoder [19] to extract low-dimensional fea-
+tures. The state of the quadrotor S(t) ∈ R4 contains the current
+velocity and the acceleration output in the previous frame.
+Velocity data is acquired directly from the Unity environment
+during training and from the velocity estimator of the PX4 ﬂight
+
+Authorized licensed use limited to: South China Normal University. Downloaded on March 21,2025 at 03:34:07 UTC from IEEE Xplore.  Restrictions apply.
+
+
+FAN et al.: FLYING IN HIGHLY DYNAMIC ENVIRONMENTS WITH END-TO-END LEARNING APPROACH
+
+3855
+
+3) Policy Training: Unity is a powerful engine that facilitates
+kinematics simulation and provides relevant interfaces. With the
+Unity Machine Learning Agents Toolkit (ML-Agents), it is very
+convenient to build up a reinforcement learning environment by
+calling the related APIs, so we choose it as the training platform.
+The policy is trained with the Proximal Policy Optimization
+algorithm (PPO) [20], where the Actor network is deﬁned as
+Fig. 2, and the Critic network is embedded in ML-Agents. We
+employ 4 parallel agents to train the policy, and the training
+timescale has been set to 10.
+
+In Fig. 4(a), the training environment is depicted, where each
+quadrotor operates within a square arena. At the beginning of
+every training episode, the side length of the arena is randomly
+set between 10 m to 20 m. Simultaneously, static obstacles
+with randomized positions, rotations, and scales are generated.
+Additionally, a random goal position, maintaining a safe distance
+of 1 m from any of the static obstacles, is speciﬁed. 5 dynamic
+obstacles, ranging in scale from 0.1 m to 1 m, appear randomly at
+the edges of the arena. These dynamic obstacles move at random
+speeds from 1 m/s to 6 m/s, and will be reset if collide with the
+edges of the arena. When a dynamic obstacle has been reset, it
+possesses a 50% probability of moving towards the position of
+the quadrotor or moving in a random direction otherwise.
+
+Each training episode has a step limit of 2000. If this limit
+is reached, the current episode concludes. In the event that a
+collision occurs before reaching the step limit, an additional
+punishment will be applied to the reward function, and the
+training episode will be terminated earlier.
+
+IV. EXPERIMENTS
+
+Fig. 4. Our training environment in Unity. Statistic and dynamic obstacles
+are randomly generated. (a) Is the training environment in Unity. (b) Shows the
+dynamic obstacle reward ri
+d(t) in (13). (c) Demonstrates the dilation ratio ki(t)
+in (12). The dynamic obstacle is moving at the speed of 5 m/s in the calculation
+of the reward function in (b) and the dilation ratio in (c).
+
+training environment, the dilation ratio for dynamic obstacle i
+can be calculated with:
+(cid:4)
+
+ki(t) =
+
+1 + (cid:4)vi(t)(cid:4)(1 − 2θi(t)
+1
+
+π
+
+)e
+
+1
+
+1+ci (t) 0 (cid:2) θi(t) (cid:2) π
+2
+2 < θi(t) (cid:2) π
+π
+
+(12)
+where vi(t) represents the linear velocity of dynamic obstacle i
+under the global coordinate frame, ci(t) indicates the clearance
+distance from the quadrotor to the extended line of the velocity
+vector of this dynamic obstacle, and θi(t) denotes the included
+angle between the velocity vector of the obstacle and the vector
+from the obstacle to the quadrotor (see Fig. 4(b)). Fig. 4(c)
+illustrates the curve of the dilation ratio when vi(t) = 5. The
+overall dynamic obstacle reward rd(t) can be computed as:
+eds− di (t)
+0
+
+ki(t) − 1 di(t)
+ki(t) (cid:2) ds
+di(t)
+ki(t) > ds
+
+(t) =
+
+⎧
+⎨
+
+(13)
+
+ri
+d
+
+⎩
+
+rd(t) =
+
+n(cid:3)
+
+i=0
+
+ri
+d
+
+(t)
+
+In this section, we showcase our simulation tests and real-
+world experiments aimed at validating the effectiveness of the
+method proposed in this letter.
+
+(14)
+
+where di(t) indicates the distance from the quadrotor to dynamic
+obstacle i. Fig. 4(b) illustrates an instance of dynamic obstacle
+reward.
+
+The hovering reward, denoted as rh(t), gives additional re-
+wards to the agent as the quadrotor approaches the goal point
+and its distance to the goal point is within a threshold distance
+gh. It encourages the quadrotor to sustain a stable hover over the
+goal point until a new goal is designated. The computation of
+the hovering reward can be expressed as:
+
+(cid:4)
+
+rh(t) =
+
+egh−g(t) − 1 g(t) (cid:2) gh
+g(t) > gh
+0
+
+(15)
+
+The total reward R at time t is given by:
+
+R = rb − ka(cid:4)a(t)(cid:4) − kvrv(t) − kgg(t) − kprp(t)
+− kjrj(t) − ko(ro(t) + rd(t)) + khrh(t)
+
+(16)
+
+where ka, kv, kg, kp, kj, ko, and kh represent the weights
+assigned to each component of the reward function, a(t) is
+the acceleration of the quadrotor. Additionally, rb denotes the
+fundamental reward value the agent receives in each step if the
+quadrotor has not collided with any obstacles.
+
+A. Evaluations in Simulation
+
+To evaluate and compare the performance of our methodology
+against existing approaches, we design 5 distinct simulation
+environments for benchmarking purposes. Each environment is
+conﬁned within a 20 m × 20 m test ground enclosed by walls.
+Dynamic obstacles within these test grounds are characterized
+by random velocities ranging from 0 m/s to 4 m/s, moving
+in random directions. In addition, the movement direction and
+velocity of dynamic obstacles underwent continual changes.
+
+Illustrations of the simulation environments are shown in
+Fig. 5. We execute the simulations on a desktop system featuring
+an i5-13600KF CPU and an RTX 4060 Ti GPU, operating on
+Ubuntu 20.04. For each scenario, we designate 10 random target
+points and assess the success rate of reaching these points with-
+out colliding with obstacles. Additionally, we record the average
+processing time, indicating the inference time for learning-based
+approaches or the combined perception and planning duration
+for optimization-based methods.
+
+In our comparative analysis, we establish control groups,
+which include a traditional optimization-based method outlined
+in [15], as well as learning-based methods detailed in [17]
+and [21]. [17] was initially developed for unmanned ground
+
+Authorized licensed use limited to: South China Normal University. Downloaded on March 21,2025 at 03:34:07 UTC from IEEE Xplore.  Restrictions apply.
+
+
+3856
+
+IEEE ROBOTICS AND AUTOMATION LETTERS, VOL. 10, NO. 4, APRIL 2025
+
+Fig. 5. The quadrotor maneuvers through 5 distinct dynamic and cluttered environments in simulation. The scenarios labeled (a) to (e) correspond to scenarios
+1 to 5 outlined in Table III, respectively.
+
+TABLE I
+REWARD FUNCTIONS FOR LEARNING-BASED METHODS
+
+TABLE III
+DYNAMIC OBSTACLE AVOIDANCE BENCHMARK COMPARISON IN
+ENVIRONMENTS WITH DIFFERENT OBSTACLE DENSITIES
+
+TABLE II
+OBSERVATION AND ACTION SPACE FOR LEARNING-BASED METHODS
+
+vehicles (UGVs) and features a distinct action space compared
+to quadrotors. Moreover, [17] incorporates both lidar and RGB
+image data as input, which may not seamlessly align with our
+quadrotor application scenario. On the other hand, [21] leverages
+the global map of the environment as input, disregarding the
+perception aspect entirely, thereby rendering it incompatible
+with point cloud data input.
+
+To ensure a fair and reasonable comparison, we introduce
+modiﬁcations to [17] and [21], aligning them with our sim-
+ulation environment. These modiﬁcations contain alterations
+in the observation and action spaces, alongside adjustments to
+the reward functions to suit these modiﬁcations. The adapted
+reward functions, observation space, and action space utilized
+are detailed in Tables I and II respectively.
+
+Table III demonstrates that our proposed approach exhibits
+superior efﬁciency and a higher success rate when navigating
+through environments populated with multiple high-speed dy-
+namic obstacles. η presents the success rate of reaching the goal
+position without collision. tp denotes the processing time per
+step in learning-based approaches and presents the planning
+duration in optimization-driven approaches. va is the average
+velocity during the ﬂight. Rl = 10 ∗ l/(cid:4)Pg − Ps(cid:4) signiﬁes the
+proportion between the path length and the direct path distance
+to the goal position, where l denotes the path length, and Pg,
+Ps represent the vectors of the initial and goal positions, respec-
+tively. While the above-mentioned methods achieve a decent
+
+success rate in environments with relatively low obstacle density,
+our approach maintains a decent success rate even as obstacle
+density increases, contrasting with the substantial success rate
+decline observed in the other methodologies. Our approach
+additionally attains the maximum average velocity across all
+ﬁve scenarios and attains the shortest path length in two of these
+scenarios.
+
+The perception module in [15] experiences noticeable latency
+when processing point cloud data containing a large number of
+dynamic obstacles, leading to performance degradation. This
+latency signiﬁcantly impacts the ability of the system to respond
+effectively in dynamic environments. Our processing time is
+shorter than both conventional and learning-based methods. Fur-
+thermore, the reward functions utilized in [17] and [21] are not
+ﬁnely tuned for scenarios involving dynamic obstacles, resulting
+in a decline in performance in environments with high-speed
+dynamic obstacles. These reward functions hinder the ability
+of the agents to navigate efﬁciently in challenging dynamic
+environments.
+
+To assess the impact of the proposed reward function con-
+cerning dynamic obstacles, a series of ablation experiments
+are conducted. The reward function is modiﬁed by eliminating
+the dynamic obstacle reward rd(t) and applying the reward
+function for static obstacles ro(t) instead to compute the penalty
+attributed to dynamic obstacles. Three scenarios are established
+by varying the average speeds of the dynamic obstacles in the
+third scenario outlined in Table III.
+
+Authorized licensed use limited to: South China Normal University. Downloaded on March 21,2025 at 03:34:07 UTC from IEEE Xplore.  Restrictions apply.
+
+
+FAN et al.: FLYING IN HIGHLY DYNAMIC ENVIRONMENTS WITH END-TO-END LEARNING APPROACH
+
+3857
+
+Fig. 6. Here are some examples of our quadrotor successfully avoiding ﬂying balls during real-world experiments. (a) Presents the quadrotor avoiding multiple
+ﬂying balls at the same time. In (b), the quadrotor successfully avoids a ball ﬂying at a speed of 6 m/s, while (c) showcases the data captured by the lidar and the
+motion capture system during this evasion maneuver. (d) Shows the quadrotor avoiding multiple balls while navigating.
+
+TABLE IV
+EVALUATION OF REWARD FUNCTIONS
+
+Table IV illustrates the efﬁcacy of the dynamic obstacle
+reward function in enhancing the success rate of navigation in
+highly dynamic environments. Furthermore, the enhancement in
+success rate attributed to the dynamic obstacle reward function
+becomes more pronounced as the average speed of dynamic
+obstacles increases.
+
+eliminates the need for the quadrotor to transition from a hov-
+ering state to a maneuvering state when faced with approaching
+obstacles. This reduces reaction times upon detecting dynamic
+obstacles within the ﬁeld of view, enhancing performance in
+similar scenarios.
+
+Our system is also able to process scenarios involving mul-
+tiple high-speed dynamic obstacles. Fig. 6(a) showcases the
+quadrotor deftly maneuvering to avoid two balls ﬂying towards
+it simultaneously while it is hovering.
+
+Furthermore, we also demonstrate that our quadrotor can
+avoid high-speed dynamic obstacles while navigating to a des-
+ignated goal. Fig. 6(d) shows that our quadrotor has successfully
+avoided multiple incoming balls while ﬂying towards a goal at
+a speed of 2 m/s.
+
+B. Implementation of Real-World Experiments
+
+D. Navigating in Cluttered Environments
+
+Our quadrotor platform design for real-world experiments
+features peripheral dimensions of 240 mm. The platform is
+equipped with propellers with all-around protection, ensuring
+the safety of experiments. This quadrotor platform is outﬁtted
+with a Moreﬁne M6S onboard computer for neural network and
+odometry deployment, boasting an Intel N100 CPU and 12 GB of
+RAM. For sensing capabilities, it incorporates a Livox Mid-360
+lidar with a wide ﬁeld of view (FOV) of 360◦ horizontally and
+59◦ vertically. The onboard computer runs on Ubuntu 20.04,
+and leverages Fast-Lio for odometry. In terms of ﬂight control,
+the platform utilizes a mRo Pix-Racer Pro with PX4 ﬁrmware.
+With a total weight of 960 g, inclusive of a 1300 mAh battery,
+the platform offers a ﬂight endurance time of 6.5 minutes.
+
+C. High-Speed Obstacle Avoidance
+
+Our methodology showcases a notable advantage in evading
+high-speed dynamic obstacles. To evaluate its efﬁcacy in such
+scenarios, we conduct an experiment involving obstacles ﬂying
+at a high speed. In this experiment, we assign the quadrotor a
+ﬁxed target position and throw balls toward it while it is hovering.
+The quadrotor autonomously maneuvers to avoid these incom-
+ing balls, and the motion capture system records the positional
+data of both the quadrotor and the balls.
+
+Throughout the experiment, our quadrotor is able to evade the
+ball ﬂying at a speed up to 6 m/s, as illustrated in Fig. 6(b) and (c).
+Utilizing a single neural network to handle various situations
+
+To evaluate the practical efﬁcacy of our approach in cluttered
+dynamic environments, we design ﬁve distinctive real-world
+scenarios.
+
+Initially, we establish a foundational scenario to validate the
+core navigation functionality. Diverse boxes of varying shapes
+and sizes were randomly positioned as obstacles on the test
+ground. The quadrotor is assigned a target position 10 meters
+ahead of its takeoff point. Fig. 7(a) shows the trajectory of the
+quadrotor as it navigates through the obstacles without collision.
+Subsequently, we heighten the challenge by introducing three
+additional obstacles to the test ground while maintaining the
+same target position. The quadrotor successfully maneuvers
+through these obstacles, but its velocity is reduced due to the
+increased obstacle density. The trajectory of this scenario is
+illustrated in Fig. 7(b).
+
+In the third scenario, we integrate three pedestrians into the
+environment, introducing dynamic obstacles among the static
+obstacles as the quadrotor ﬂies through the test ground. Fig.
+7(c) showcases the trajectory of the quadrotor, and it is able
+to take evasive maneuvers when a pedestrian obstructs its
+path.
+
+Expanding upon the complexity of the third scenario, pedes-
+trians are tasked with altering the test ground layout by replacing
+obstacles in the ﬂight path of the quadrotor. The quadrotor
+adeptly halts when facing an obstructing obstacle, subsequently
+recalibrating its route to avoid it. The trajectory of this experi-
+ment is depicted in Fig. 7(d).
+
+Authorized licensed use limited to: South China Normal University. Downloaded on March 21,2025 at 03:34:07 UTC from IEEE Xplore.  Restrictions apply.
+
+
+3858
+
+IEEE ROBOTICS AND AUTOMATION LETTERS, VOL. 10, NO. 4, APRIL 2025
+
+Fig. 7. The trajectory of our quadrotor navigating through ﬁve different scenarios. (a) is set with static obstacles in low density, (b) is set with static obstacles in
+high density, (c) involves pedestrians walking around the obstacles, (d) contains pedestrians moving the obstacles, and (e) is set with a few static obstacles to test
+the high-speed performance.
+
+To highlight the efﬁcacy of our methodology under high-
+speed settings, the ﬁfth scenario involves sparse obstacle place-
+ment, challenging the quadrotor to swiftly navigate through
+them. The quadrotor achieves a notable speed of 6 m/s, sur-
+passing the outcomes of 3 m/s in [22], and around 5 m/s in [23].
+The trajectory of the quadrotor in this scenario is depicted in
+Fig. 7(e).
+
+Across all of the scenarios, the quadrotor consistently main-
+tains a hovering position at the designated target point upon
+arrival, awaiting commands for a new target destination. The se-
+ries of scenarios demonstrate the adaptability and effectiveness
+of our navigation approach in maneuvering through dynamic
+cluttered environments.
+
+V. CONCLUSION
+
+In this letter, we introduced a novel learning-based strategy
+designed for quadrotors to effectively navigate through highly
+dynamic and cluttered environments. Our methodology involved
+utilizing a lidar data processor to encode point cloud data into
+a range array. By stacking these range arrays into a 2D array,
+our neural network can discern dynamic obstacle features and
+execute appropriate evasive actions. We employed an end-to-
+end neural network for navigation, which controls the quadro-
+tor by giving acceleration commands. A specialized reward
+function was applied to enhance its reaction against dynamic
+obstacles.
+
+Our approach showcased strong portability and excels across
+various dynamic environments, particularly in scenarios with
+high-speed obstacles. However, owing to the nature of end-
+to-end networks, the acceleration commands generated by the
+network may exhibit frequent ﬂuctuations, and the current net-
+work framework was limited to obstacle avoidance within a
+horizontal plane. Future works may concentrate on expanding
+the maneuvering capabilities into three-dimensional space and
+enhancing overall stability.
+
+REFERENCES
+
+[1] B. Zhou, H. Xu, and S. Shen, “RACER: Rapid collaborative exploration
+with a decentralized multi-UAV system,” IEEE Trans. Robot., vol. 39,
+no. 3, pp. 1816–1835, Jun. 2023.
+
+[2] X. Zhou, Z. Wang, H. Ye, C. Xu, and F. Gao, “EGO-planner: An ESDF-free
+gradient-based local planner for quadrotors,” IEEE Robot. Automat. Lett.,
+vol. 6, no. 2, pp. 478–485, Apr. 2021.
+
+[3] A. Alcántara, J. Capitán, R. Cunha, and A. Ollero, “Optimal trajectory
+planning for cinematography with multiple unmanned aerial vehicles,”
+Robot. Auton. Syst., vol. 140, 2021, Art. no. 103778.
+
+[4] D. Mellinger and V. Kumar, “Minimum snap trajectory generation and
+control for quadrotors,” in Proc. 2011 IEEE Int. Conf. Robot. Automat.,
+2011, pp. 2520–2525.
+
+[5] Y. Song, K. Shi, R. Penicka, and D. Scaramuzza, “Learning perception-
+aware agile ﬂight in cluttered environments,” in Proc. 2023 IEEE Int. Conf.
+Robot. Automat., 2023, pp. 1989–1995.
+
+[6] A. Loquercio, E. Kaufmann, R. Ranftl, M. Müller, V. Koltun, and D.
+Scaramuzza, “Learning high-speed ﬂight in the wild,” Sci. Robot., vol. 6,
+no. 59, 2021, Art. no. eabg5810.
+
+[7] S. Ross et al., “Learning monocular reactive UAV control in cluttered
+natural environments,” in Proc. 2013 IEEE Int. Conf. Robot. Automat.,
+2013, pp. 1765–1772.
+
+[8] M. Kim, J. Kim, M. Jung, and H. Oh, “Towards monocular vision-based
+autonomous ﬂight through deep reinforcement learning,” Expert Syst.
+Appl., vol. 198, 2022, Art. no. 116742.
+
+[9] M. Lu, H. Chen, and P. Lu, “Perception and avoidance of multiple small
+fast moving objects for quadrotors with only low-cost RGBD camera,”
+IEEE Robot. Automat. Lett., vol. 7, no. 4, pp. 11657–11664, Oct. 2022.
+
+[10] G. Chen, W. Dong, X. Sheng, X. Zhu, and H. Ding, “An active sense and
+avoid system for ﬂying robots in dynamic environments,” IEEE/ASME
+Trans. Mechatron., vol. 26, no. 2, pp. 668–678, Apr. 2021.
+
+[11] D. Falanga, K. Kleber, and D. Scaramuzza, “Dynamic obstacle avoidance
+for quadrotors with event cameras,” Sci. Robot., vol. 5, no. 40, 2020,
+Art. no. eaaz9712.
+
+[12] E. Mueggler, N. Baumli, F. Fontana, and D. Scaramuzza, “Towards evasive
+maneuvers with quadrotors using dynamic vision sensors,” in Proc. IEEE
+Eur. Conf. Mobile Robots, 2015, pp. 1–8.
+
+[13] J. Lin, H. Zhu, and J. Alonso-Mora, “Robust vision-based obstacle avoid-
+ance for micro aerial vehicles in dynamic environments,” in Proc. 2020
+IEEE Int. Conf. Robot. Automat., 2020, pp. 2682–2688.
+
+[14] Y. Wang, J. Ji, Q. Wang, C. Xu, and F. Gao, “Autonomous ﬂights in dynamic
+environments with onboard vision,” in Proc. 2021 IEEE/RSJ Int. Conf.
+Intell. Robots Syst., 2021, pp. 1966–1973.
+
+[15] M. Lu, X. Fan, H. Chen, and P. Lu, “FAPP: Fast and adaptive perception
+and planning for UAVs in dynamic cluttered environments,” IEEE Trans.
+Robot., vol. 41, pp. 871–886, 2025.
+
+[16] J. Tordesillas and J. P. How, “Deep-PANTHER: Learning-based
+perception-aware trajectory planner in dynamic environments,” IEEE
+Robot. Automat. Lett., vol. 8, no. 3, pp. 1399–1406, Mar. 2023.
+
+[17] Z. Xie and P. Dames, “DRL-VO: Learning to navigate through crowded
+dynamic scenes using velocity obstacles,” IEEE Trans. Robot., vol. 39,
+no. 4, pp. 2700–2719, Aug. 2023.
+
+[18] H.-C. Wang et al., “Curriculum reinforcement learning from avoiding col-
+lisions to navigating among movable obstacles in diverse environments,”
+IEEE Robot. Automat. Lett., vol. 8, no. 5, pp. 2740–2747, May 2023.
+[19] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image
+recognition,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit., 2016,
+pp. 770–778.
+
+[20] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Proximal
+
+policy optimization algorithms,” 2017, arXiv:1707.06347.
+
+[21] Y. Yang, K. Zhang, D. Liu, and H. Song, “Autonomous UAV navigation
+in dynamic environments with double deep Q-networks,” in Proc. 2020
+AIAA/IEEE 39th Digit. Avionics Syst. Conf., 2020, pp. 1–7.
+
+[22] X. Zhou et al., “Swarm of micro ﬂying robots in the wild,” Sci. Robot.,
+
+vol. 7, no. 66, 2022, Art. no. eabm5954.
+
+[23] D. Schleich and S. Behnke, “Predictive angular potential ﬁeld-based
+obstacle avoidance for dynamic UAV ﬂights,” in Proc. 2022 IEEE/RSJ
+Int. Conf. Intell. Robots Syst., 2022, pp. 13618–13625.
+
+Authorized licensed use limited to: South China Normal University. Downloaded on March 21,2025 at 03:34:07 UTC from IEEE Xplore.  Restrictions apply.

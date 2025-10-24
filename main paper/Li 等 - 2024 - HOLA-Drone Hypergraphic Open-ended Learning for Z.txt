@@ -1,0 +1,1412 @@
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+
+1
+
+HOLA-Drone: Hypergraphic Open-ended Learning
+for Zero-Shot Multi-Drone Cooperative Pursuit
+
+Yang Li, Dengyu Zhang, Junfan Chen, Ying Wen, Qingrui Zhang, Shaoshuai Mou, Wei Pan
+
+4
+2
+0
+2
+
+t
+c
+O
+1
+
+]
+
+O
+R
+.
+s
+c
+[
+
+2
+v
+7
+6
+7
+8
+0
+.
+9
+0
+4
+2
+:
+v
+i
+X
+r
+a
+
+Abstract—Zero-shot coordination (ZSC) is a significant chal-
+lenge in multi-agent collaboration, aiming to develop agents that
+can coordinate with unseen partners they have not encountered
+before. Recent cutting-edge ZSC methods have primarily fo-
+cused on two-player video games such as OverCooked!2 and
+Hanabi. In this paper, we extend the scope of ZSC research to
+the multi-drone cooperative pursuit scenario, exploring how to
+construct a drone agent capable of coordinating with multiple
+unseen partners to capture multiple evaders. We propose a
+novel Hypergraphic Open-ended Learning Algorithm (HOLA-
+Drone) that continuously adapts the learning objective based
+on our hypergraphic-form game modeling, aiming to improve
+cooperative abilities with multiple unknown drone teammates. To
+empirically verify the effectiveness of HOLA-Drone, we build two
+different unseen drone teammate pools to evaluate their perfor-
+mance in coordination with various unseen partners. The exper-
+imental results demonstrate that HOLA-Drone outperforms the
+baseline methods in coordination with unseen drone teammates.
+Furthermore, real-world experiments validate the feasibility of
+HOLA-Drone in physical systems. Videos can be found on the
+project homepage https://sites.google.com/view/hola-drone.
+
+Index Terms—Cooperative Pursuit, Multirobot system, Zero-
+
+shot Coordination, Open-ended Learning
+
+I. INTRODUCTION
+
+In multirobot system, the problem of cooperative drone
+pursuit plays a crucial role in various applications such as
+surveillance and urban security [1], [2], [3]. A key challenge
+in these settings arises when a drone must coordinate with
+previously unseen teammates. This is where zero-shot coor-
+dination (ZSC) comes into play, which allows for efficient
+collaboration with new partners and has gained considerable
+attention in cooperative AI [4], [5], [6], [7], [8], [9], [10].
+In this paper, we address the zero-shot cooperative multi-
+drone pursuit problem, where a learner drone is placed in a
+cooperative scenario with multiple unseen drone teammates to
+pursue and capture multiple evaders. The learner drone must
+rapidly coordinate with its teammates without modifying its
+fixed policy from the training phase [4].
+
+Recent advances in multi-robot pursuit research can be
+categorized into three main approaches: rule-based heuristic
+methods, differential game theoretical methods, and learning-
+based methods. Rule-based heuristic methods are primarily
+inspired by biological behaviors, aiming to imitate hunting and
+
+Yang Li, Junfan Chen, and Wei Pan are with the Department of Computer
+
+Science, The University of Manchester, Manchester, UK.
+
+Dengyu Zhang and Qingrui Zhang are with the School of Aeronautics and
+
+Astronautics, Sun Yat-sen University, Shenzhen, China.
+
+Ying Wen is with the School of Electronic, Information and Electrical
+
+Engineering, Shanghai Jiao Tong University, Shanghai, China.
+
+Shaoshuai Mou is with School of Aeronautics and Astronautics, Purdue
+
+University, USA.
+
+pursuit actions observed in nature [11], [12], [13], [14], [15],
+[16]. However, these methods face limitations when dealing
+with complex tasks, such as those involving evader movement
+advantages and complex environments. The second category
+of methods utilizes differential game theory to address the
+multi-robot pursuit problem by deriving theoretically optimal
+strategies. These methods, however, often require precise state
+transition equations, leading to reduced performance under
+conditions of uncertainty. Lastly, learning-based methods have
+significant advantages in enhancing distributed cooperative
+pursuit abilities across various environments and tasks [17],
+[18], [19], [20]. Nevertheless, even the most advanced meth-
+ods, including learning-based approaches, struggle to handle
+scenarios involving collaboration with unseen partners in
+multi-robot pursuit task.
+
+The most current methods for solving the zero-shot coor-
+dination problem focus on two-player video games [21], [5].
+Conventional self-play and its subsequent methods [22], [5],
+[4] aim to improve cooperative ability by playing with a copy
+or permutation of itself. Cutting-edge approaches often involve
+pre-training diverse strategy populations and then training a
+common best-response to these pretrained diverse agents to
+enhance coordination with various agents [6], [23], [24], [8].
+Furthermore, recent research [25], [9] has focused on improv-
+ing compatibility within the population to further enhance
+cooperative abilities. However, these methods are typically
+designed for two-player video games in 2D simulators, rather
+than for multi-agent collaboration in the physical world.
+
+In this paper, we propose a novel Hypergraphic Open-ended
+Learning Algorithm (HOLA-Drone) to address the multi-
+drone zero-shot coordination problem in cooperative pursuit
+tasks. To the best of our knowledge, this is the first work to
+formulate the cooperative multi-drone pursuit task as a ZSC
+problem within the framework of a decentralized partially
+observable Markov decision process (Dec-POMDP). Most
+existing works on Dec-POMDPs in multi-drone pursuit [26],
+[2], [27] have primarily focused on coordination among agents
+with known teammates. By introducing the ZSC setting,
+we open the door to more adaptable and robust solutions,
+allowing drone teams to effectively collaborate with unseen
+partners in a variety of unknown or evolving environments.
+We further propose the novel Hypergraphic-Form game and
+corresponding concepts to capture the cooperative interac-
+tion relationships among multiple agents in a hypergraph,
+allowing us to effectively evaluate the cooperative abilities of
+each agent. These concepts are incorporated into the open-
+ended learning framework [28], [29], [30], which automati-
+cally adapts learning objectives to continuously improve the
+
+
+
+
+
+
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+
+2
+
+learner’s cooperative ability with various teamamtes, unlike
+most current methods that rely on fixed predefined objective
+functions. To evaluate the ZSC ability with multiple unseen
+drone agents, we first construct two sets of drone agents with
+different algorithms and varying levels of cooperative ability
+as unseen partners. We then conduct a series of experiments to
+verify the effectiveness of HOLA-Drone compared to baselines
+when coordinating with unseen drone partners sampled from
+these pre-built pools. Additionally, we directly deploy the
+learned policies in real-world Crazyflie drones to justify the
+feasibility of HOLA-Drone in physical systems.
+
+Our contributions can be summarized as threefold: (1) To
+the best of our knowledge, we are the first to frame the
+cooperative pursuit task as a zero-shot coordination problem,
+enabling drone to collaborate effectively with unseen partners
+in evolving environments. (2) We propose a hypergraphic
+open-ended learning algorithm to continuously improve the
+learner’s cooperative ability with multiple teammates in the
+complex multi-drone pursuit task, moving beyond the two-
+player video games typically used in current ZSC research. (3)
+The simulation and real-world experiments, conducted with
+a set of previously unseen drone partners, demonstrate the
+effectiveness and feasibility of the proposed algorithm HOLA-
+Drone in physical world.
+
+II. RELATED WORK
+
+a) Multi-robot pursuit.: One of the classic methods for
+solving the multi-robot pursuit problem is rule-based heuristic
+methods. Heuristic rules inspired by biological behavior have
+been proposed to imitate hunting and pursuit actions observed
+in nature. Most heuristic rules are implemented using artificial
+attractive and repulsive forces [31], [12], [13]. For instance,
+[32] designed predictive attraction forces, obstacle repulsive
+forces, and teammate repulsive forces for encirclement. Sim-
+ilarly, [15] proposed a method based on Voronoi tessellation,
+which is suitable for ground vehicles. However, these rule-
+based methods are manually designed based on the obser-
+vations or experiences of the designer, which limits their
+applicability. Differential game theory is another approach
+to solving the multi-robot pursuit problem [33], [34], [35],
+[36]. [36] modeled a two-on-one pursuit problem as a zero-
+sum game and obtained an analytical solution. [35] considered
+pursuers and evaders as nonholonomic constraint systems and
+introduced model predictive control to minimize the evader’s
+safe zone. These methods, similar to optimal control, derive
+strategies by maximizing the utility function based on the
+Hamilton-Jacobi-Bellman equation of the system. However,
+they require precise state transition equations, resulting in
+reduced performance under uncertainty and unknown envi-
+ronments. Learning-based methods have been proposed to
+enhance distributed cooperative pursuit abilities in various
+environments and tasks [17], [18], [19], [20]. [20] used cur-
+riculum learning and parameter sharing techniques to train
+collaborative intelligent agents, which initially move towards
+the evader, then slow down at an appropriate distance, and
+disperse to surround the evader. Although the learned strat-
+egy, under a well-designed reward function and substantial
+
+data, exhibits intelligence similar to biological behavior, this
+method lacks scalability. [37] proposed an attention interface
+to enhance interaction between agents and the environment,
+demonstrating better performance in a 100-on-100 collabora-
+tive pursuit task. [2] introduced a hybrid design that integrates
+rule-based strategies into reinforcement learning for multi-
+robot pursuit, improving data efficiency and generalization.
+However, most of these methods may fail to coordinate with
+unseen partners. To the best of our knowledge, we are the
+first to propose the zero-shot multi-drone cooperative pursuit
+problem and introduce a novel HOLA-Drone algorithm to
+handle the problem.
+
+b) Zero-shot coordination.: [5] introduced a novel two-
+player, fully cooperative environment inspired by the popular
+game Overcooked, which demands challenging coordination.
+Their method involves learning a simple model that emu-
+lates human play, serving as a standard unseen evaluation
+agent within the Overcooked environment. The self-play (SP)
+method [22] was implemented in this Overcooked setting to
+coordinate zero-shot with the unseen human proxy model [5].
+However, SP tends to become stuck in the conventions formed
+between trained players, making it in a unable to cooperate
+with other unseen strategies [38], [4]. To address this issue,
+other-play [4] was proposed, introducing permutations to one
+of the strategies to break the conventions formed by the self-
+play method [22], [5]. However, this approach may revert
+to self-play if the game or environment lacks symmetries
+or has unknown symmetries. Recent ZSC research is mainly
+inspired by population-based training (PBT), which improves
+adaptability by fostering cooperation with multiple strategies
+within a population [5]. However, PBT does not explicitly
+thus failing to coordinate with unseen
+maintain diversity,
+partners [6]. To address this limitation and achieve the goal
+of ZSC, cutting-edge methods emphasize pre-training diverse
+strategy populations [6], [23] or applying handcrafted tech-
+niques [24], [8] to excel in cooperative games by optimizing
+objectives within these populations. Furthermore, mechanisms
+such as coevolution and combinatorial generalization have
+been introduced to enhance generalization ability [39], [40].
+Recent research [25], [9] has also focused on improving
+compatibility within the population to enhance cooperative
+abilities. However, most of these methods address the ZSC
+problem in two-player video games such as Hanabi [21]
+and Overcooked!2 [5]. In this work, we extend the scope to
+multiple agents beyond two players, tackling more complex
+real-world cooperative multi-drone pursuit problems instead
+of video games in simulator.
+
+III. PROBLEM FORMULATION
+
+In this paper, we focus on the multi-drone cooperative pur-
+suit task, where pursuit drones aim to capture faster evaders,
+within a confined environment containing obstacles. An evader
+e is considered captured by a drone p if the distance dp,e
+between p and e is less than a predefined capture threshold
+dc. Furthermore, a collision is defined to occur if the distance
+between two drones is less than κ or if the distance between
+a drone and an obstacle is less than ds, where ds is the safe
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+
+3
+
+Fig. 1: Top row: Classic multi-agent reinforcement learning (MARL) with centralized training and decentralized
+- Training Phase: All agents are updated collectively. - Evaluation Phase: The same agents
+execution (CTDE) framework.
+that were involved in the training phase are deployed. The evaluation assesses the collective performance of these pre-trained
+agents in achieving the task using the strategies learned during training. Bottom row: Proposed zero-shot cooperative multi-
+drone pursuit scheme. - Training Phase: A single learner agent is trained by co-playing with a set of non-learnable partners.
+- Evaluation Phase: The learner agent is required to coordinate with previously unseen partner agents that were not part of
+its training. The goal is to assess the learner’s zero-shot coordination ability with any new, unseen partner without additional
+updating.
+
+radius for drones. Thus, the objective of the pursuers is to
+capture all evaders without collisions.
+
+The zero-shot coordination problem arises in scenarios
+where there is no opportunity to update the fixed policy
+established during training when coordinating with unseen
+partners [4]. Fig. 1 compares two frameworks: the standard
+multi-agent reinforcement learning (MARL) with centralized
+training and decentralized execution (CTDE) and the zero-
+shot cooperative multi-drone pursuit scheme. In the upper
+row of Fig. 1, the training and evaluation phases of MARL
+with CTDE are illustrated along with the corresponding
+environment schematic diagram. In the CTDE scheme, all
+controlled agents are updated collectively during the training
+phase using a shared policy or a centralized critic with access
+to centralized information. During the evaluation, the same
+agents trained in the training phase are deployed to assess
+their collective performance in achieving the task using the
+learned strategies. However, the zero-shot cooperative multi-
+drone pursuit framework, shown in the bottom row of Fig. 1,
+is designed to train a single learner agent to co-play with other
+non-learnable partners. The evaluation phase for this scheme
+is notably different: the learner agent is required to coordinate
+with unseen partners, unlike in the classic MARL scheme
+where partners are collectively trained together. This approach
+assesses the learner’s zero-shot coordination ability—its ability
+to work effectively with any new, unseen partner without
+additional updates.
+
+The zero-shot multi-drone pursuit problem can be effec-
+tively modeled as a decentralized partially observable Markov
+decision process (Dec-POMDP). A Dec-POMDP, denoted as
+M, is defined by the tuple (S, N , A, P, r, O, γ, T ). Here, N
+represents the set of drone agents, which includes both the
+pursuers (Np) and the evaders (Ne). Specifically, Np consists
+of the learner (N1) and its co-players (N−1). Additionally, S
+denotes the joint-state space, while A = ×k
+j=1Aj represents
+the joint-action space, where k is the team size. P and O
+are the transition and observation functions, respectively. The
+reward function is denoted by r, γ is the reward discount
+factor, and T represents the task horizon. In the zero-shot
+multi-drone pursuit task, the policies of the learner’s team-
+mates and the evaders are often pre-trained or pre-defined. At
+the beginning of each episode, the learner’s teammates N−1
+are sampled from a population U. At time t > 0, the Dec-
+POMDP is in state st ∈ S and generates a stochastic joint ob-
+servation ot = (o1
+t ) ∼ O(·|st), which is added to the
+action-observation trajectory τt = (o0, a0, · · · , ot−1, at−1, ot).
+Each drone agent j ∈ N then selects an action aj
+t ∈ Aj
+using its policy πj(aj|τ j
+t ). The environment transitions to
+state st+1 with probability P(st+1|st, at), and all pursuers
+receive a common reward r(st, at). Considering the dis-
+count factor γ ∈ [0, 1], the discounted return is R(τ ) =
+(cid:80)T
+t=0 γtr(st, at). The objective is to maximize the learner’s
+expected return with the sampled teammates, formally given
+by J = Eπ−1∼πU Eτ ∼π1,π−1,πe R(τ ). The zero-shot multi-
+
+t , · · · , ok
+
+<latexit sha1_base64="lfjEq2ZVlSJMUvqhpQemAs6Nhh4=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0lKUY9FLx4r2lpoQ9lsJ+3SzSbsboQS+hO8eFDEq7/Im//GbZuDtj4YeLw3w8y8IBFcG9f9dgpr6xubW8Xt0s7u3v5B+fCoreNUMWyxWMSqE1CNgktsGW4EdhKFNAoEPgbjm5n/+IRK81g+mEmCfkSHkoecUWOl+6Rf65crbtWdg6wSLycVyNHsl796g5ilEUrDBNW667mJ8TOqDGcCp6VeqjGhbEyH2LVU0gi1n81PnZIzqwxIGCtb0pC5+nsio5HWkyiwnRE1I73szcT/vG5qwis/4zJJDUq2WBSmgpiYzP4mA66QGTGxhDLF7a2EjaiizNh0SjYEb/nlVdKuVb2Lav2uXmlc53EU4QRO4Rw8uIQG3EITWsBgCM/wCm+OcF6cd+dj0Vpw8plj+APn8wcD8o2i</latexit>p2<latexit sha1_base64="TnFXd0WF2keaW9dpfuXYmDfv4Fc=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0m0qMeiF48V7Qe0oWy2m3bpZhN2J0IJ/QlePCji1V/kzX/jts1Bqw8GHu/NMDMvSKQw6LpfTmFldW19o7hZ2tre2d0r7x+0TJxqxpsslrHuBNRwKRRvokDJO4nmNAokbwfjm5nffuTaiFg94CThfkSHSoSCUbTSfdI/75crbtWdg/wlXk4qkKPRL3/2BjFLI66QSWpM13MT9DOqUTDJp6VeanhC2ZgOeddSRSNu/Gx+6pScWGVAwljbUkjm6s+JjEbGTKLAdkYUR2bZm4n/ed0Uwys/EypJkSu2WBSmkmBMZn+TgdCcoZxYQpkW9lbCRlRThjadkg3BW375L2mdVb2Lau2uVqlf53EU4QiO4RQ8uIQ63EIDmsBgCE/wAq+OdJ6dN+d90Vpw8plD+AXn4xsFdo2j</latexit>p3<latexit sha1_base64="9JrekfqhWusU0UW6QSzyJzGKj4M=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0mkqMeiF48V7Qe0oWy2k3bpZhN2N0IJ/QlePCji1V/kzX/jts1BWx8MPN6bYWZekAiujet+O4W19Y3NreJ2aWd3b/+gfHjU0nGqGDZZLGLVCahGwSU2DTcCO4lCGgUC28H4dua3n1BpHstHM0nQj+hQ8pAzaqz0gH2vX664VXcOskq8nFQgR6Nf/uoNYpZGKA0TVOuu5ybGz6gynAmclnqpxoSyMR1i11JJI9R+Nj91Ss6sMiBhrGxJQ+bq74mMRlpPosB2RtSM9LI3E//zuqkJr/2MyyQ1KNliUZgKYmIy+5sMuEJmxMQSyhS3txI2oooyY9Mp2RC85ZdXSeui6l1Wa/e1Sv0mj6MIJ3AK5+DBFdThDhrQBAZDeIZXeHOE8+K8Ox+L1oKTzxzDHzifP/GdjZY=</latexit>e1<latexit sha1_base64="ltGGdE1lFa7C6a582pK0rzLUjNo=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0lKUY9FLx4r2lpoQ9lsJ+3SzSbsboQS+hO8eFDEq7/Im//GbZuDtj4YeLw3w8y8IBFcG9f9dgpr6xubW8Xt0s7u3v5B+fCoreNUMWyxWMSqE1CNgktsGW4EdhKFNAoEPgbjm5n/+IRK81g+mEmCfkSHkoecUWOle+zX+uWKW3XnIKvEy0kFcjT75a/eIGZphNIwQbXuem5i/Iwqw5nAaamXakwoG9Mhdi2VNELtZ/NTp+TMKgMSxsqWNGSu/p7IaKT1JApsZ0TNSC97M/E/r5ua8MrPuExSg5ItFoWpICYms7/JgCtkRkwsoUxxeythI6ooMzadkg3BW355lbRrVe+iWr+rVxrXeRxFOIFTOAcPLqEBt9CEFjAYwjO8wpsjnBfn3flYtBacfOYY/sD5/AHzIY2X</latexit>e2<latexit sha1_base64="WtVVLkveaRULEg9uOn1W52LVtO4=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0mkqMeiF48V7Qe0oWy2k3bpZhN2N0IJ/QlePCji1V/kzX/jts1BWx8MPN6bYWZekAiujet+O4W19Y3NreJ2aWd3b/+gfHjU0nGqGDZZLGLVCahGwSU2DTcCO4lCGgUC28H4dua3n1BpHstHM0nQj+hQ8pAzaqz0kPS9frniVt05yCrxclKBHI1++as3iFkaoTRMUK27npsYP6PKcCZwWuqlGhPKxnSIXUsljVD72fzUKTmzyoCEsbIlDZmrvycyGmk9iQLbGVEz0sveTPzP66YmvPYzLpPUoGSLRWEqiInJ7G8y4AqZERNLKFPc3krYiCrKjE2nZEPwll9eJa2LqndZrd3XKvWbPI4inMApnIMHV1CHO2hAExgM4Rle4c0Rzovz7nwsWgtOPnMMf+B8/gACbo2h</latexit>p1<latexit sha1_base64="lfjEq2ZVlSJMUvqhpQemAs6Nhh4=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0lKUY9FLx4r2lpoQ9lsJ+3SzSbsboQS+hO8eFDEq7/Im//GbZuDtj4YeLw3w8y8IBFcG9f9dgpr6xubW8Xt0s7u3v5B+fCoreNUMWyxWMSqE1CNgktsGW4EdhKFNAoEPgbjm5n/+IRK81g+mEmCfkSHkoecUWOl+6Rf65crbtWdg6wSLycVyNHsl796g5ilEUrDBNW667mJ8TOqDGcCp6VeqjGhbEyH2LVU0gi1n81PnZIzqwxIGCtb0pC5+nsio5HWkyiwnRE1I73szcT/vG5qwis/4zJJDUq2WBSmgpiYzP4mA66QGTGxhDLF7a2EjaiizNh0SjYEb/nlVdKuVb2Lav2uXmlc53EU4QRO4Rw8uIQG3EITWsBgCM/wCm+OcF6cd+dj0Vpw8plj+APn8wcD8o2i</latexit>p2<latexit sha1_base64="TnFXd0WF2keaW9dpfuXYmDfv4Fc=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0m0qMeiF48V7Qe0oWy2m3bpZhN2J0IJ/QlePCji1V/kzX/jts1Bqw8GHu/NMDMvSKQw6LpfTmFldW19o7hZ2tre2d0r7x+0TJxqxpsslrHuBNRwKRRvokDJO4nmNAokbwfjm5nffuTaiFg94CThfkSHSoSCUbTSfdI/75crbtWdg/wlXk4qkKPRL3/2BjFLI66QSWpM13MT9DOqUTDJp6VeanhC2ZgOeddSRSNu/Gx+6pScWGVAwljbUkjm6s+JjEbGTKLAdkYUR2bZm4n/ed0Uwys/EypJkSu2WBSmkmBMZn+TgdCcoZxYQpkW9lbCRlRThjadkg3BW375L2mdVb2Lau2uVqlf53EU4QiO4RQ8uIQ63EIDmsBgCE/wAq+OdJ6dN+d90Vpw8plD+AXn4xsFdo2j</latexit>p3<latexit sha1_base64="9JrekfqhWusU0UW6QSzyJzGKj4M=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0mkqMeiF48V7Qe0oWy2k3bpZhN2N0IJ/QlePCji1V/kzX/jts1BWx8MPN6bYWZekAiujet+O4W19Y3NreJ2aWd3b/+gfHjU0nGqGDZZLGLVCahGwSU2DTcCO4lCGgUC28H4dua3n1BpHstHM0nQj+hQ8pAzaqz0gH2vX664VXcOskq8nFQgR6Nf/uoNYpZGKA0TVOuu5ybGz6gynAmclnqpxoSyMR1i11JJI9R+Nj91Ss6sMiBhrGxJQ+bq74mMRlpPosB2RtSM9LI3E//zuqkJr/2MyyQ1KNliUZgKYmIy+5sMuEJmxMQSyhS3txI2oooyY9Mp2RC85ZdXSeui6l1Wa/e1Sv0mj6MIJ3AK5+DBFdThDhrQBAZDeIZXeHOE8+K8Ox+L1oKTzxzDHzifP/GdjZY=</latexit>e1<latexit sha1_base64="ltGGdE1lFa7C6a582pK0rzLUjNo=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0lKUY9FLx4r2lpoQ9lsJ+3SzSbsboQS+hO8eFDEq7/Im//GbZuDtj4YeLw3w8y8IBFcG9f9dgpr6xubW8Xt0s7u3v5B+fCoreNUMWyxWMSqE1CNgktsGW4EdhKFNAoEPgbjm5n/+IRK81g+mEmCfkSHkoecUWOle+zX+uWKW3XnIKvEy0kFcjT75a/eIGZphNIwQbXuem5i/Iwqw5nAaamXakwoG9Mhdi2VNELtZ/NTp+TMKgMSxsqWNGSu/p7IaKT1JApsZ0TNSC97M/E/r5ua8MrPuExSg5ItFoWpICYms7/JgCtkRkwsoUxxeythI6ooMzadkg3BW355lbRrVe+iWr+rVxrXeRxFOIFTOAcPLqEBt9CEFjAYwjO8wpsjnBfn3flYtBacfOYY/sD5/AHzIY2X</latexit>e2<latexit sha1_base64="WtVVLkveaRULEg9uOn1W52LVtO4=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0mkqMeiF48V7Qe0oWy2k3bpZhN2N0IJ/QlePCji1V/kzX/jts1BWx8MPN6bYWZekAiujet+O4W19Y3NreJ2aWd3b/+gfHjU0nGqGDZZLGLVCahGwSU2DTcCO4lCGgUC28H4dua3n1BpHstHM0nQj+hQ8pAzaqz0kPS9frniVt05yCrxclKBHI1++as3iFkaoTRMUK27npsYP6PKcCZwWuqlGhPKxnSIXUsljVD72fzUKTmzyoCEsbIlDZmrvycyGmk9iQLbGVEz0sveTPzP66YmvPYzLpPUoGSLRWEqiInJ7G8y4AqZERNLKFPc3krYiCrKjE2nZEPwll9eJa2LqndZrd3XKvWbPI4inMApnIMHV1CHO2hAExgM4Rle4c0Rzovz7nwsWgtOPnMMf+B8/gACbo2h</latexit>p1UpdateEnvironmentUpdateUpdateUpdate…～～EnvironmentTraining PhaseEvaluation PhaseEnvironmentClassic MARL with Centralized Training and Decentralized Execution SchemeProposed Zero-shot Cooperative Drone Pursuit SchemeEnvironmentEnvironmentUnseen PartnersCollectively Trained Agents  in Training PhaseLegend<latexit sha1_base64="RmIhIcc96OVgeQ7eZV6aQIOc4wQ=">AAAB6HicbVBNS8NAEJ3Ur1q/qh69LBbBU0mkqMeiF48t2FpoQ9lsJ+3azSbsboQS+gu8eFDEqz/Jm//GbZuDtj4YeLw3w8y8IBFcG9f9dgpr6xubW8Xt0s7u3v5B+fCoreNUMWyxWMSqE1CNgktsGW4EdhKFNAoEPgTj25n/8IRK81jem0mCfkSHkoecUWOlJvbLFbfqzkFWiZeTCuRo9MtfvUHM0gilYYJq3fXcxPgZVYYzgdNSL9WYUDamQ+xaKmmE2s/mh07JmVUGJIyVLWnIXP09kdFI60kU2M6ImpFe9mbif143NeG1n3GZpAYlWywKU0FMTGZfkwFXyIyYWEKZ4vZWwkZUUWZsNiUbgrf88ippX1S9y2qtWavUb/I4inACp3AOHlxBHe6gAS1ggPAMr/DmPDovzrvzsWgtOPnMMfyB8/kDzFuM8g==</latexit>eEvader Drones<latexit sha1_base64="mcbuxDXTW9QgPzCOHFrdFyHodyI=">AAAB6HicbVBNS8NAEJ3Ur1q/qh69LBbBU0mkqMeiF48t2FpoQ9lsJ+3azSbsboQS+gu8eFDEqz/Jm//GbZuDtj4YeLw3w8y8IBFcG9f9dgpr6xubW8Xt0s7u3v5B+fCoreNUMWyxWMSqE1CNgktsGW4EdhKFNAoEPgTj25n/8IRK81jem0mCfkSHkoecUWOlZtIvV9yqOwdZJV5OKpCj0S9/9QYxSyOUhgmqdddzE+NnVBnOBE5LvVRjQtmYDrFrqaQRaj+bHzolZ1YZkDBWtqQhc/X3REYjrSdRYDsjakZ62ZuJ/3nd1ITXfsZlkhqUbLEoTAUxMZl9TQZcITNiYgllittbCRtRRZmx2ZRsCN7yy6ukfVH1Lqu1Zq1Sv8njKMIJnMI5eHAFdbiDBrSAAcIzvMKb8+i8OO/Ox6K14OQzx/AHzucP3QeM/Q==</latexit>pPursuer DronesLearnerPartners with different policies…Population - a set of drone agents～Sample partners from populationEvader
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+
+4
+
+Fig. 2: Hypergraphic Open-ended Learning Algorithm: Detailed illustration of a single generation within the open-ended
+learning phase, including the Grapher and Oracle modules.
+
+The HyFog exhibits the following two properties. HyFog
+is l-uniform as |e| = l for all e ∈ E. HyFog is connected
+as every pair of nodes is connected. Although the HyFog
+model offers a detailed framework for agent
+interactions,
+to cooperative capabilities
+directly extracting data relevant
+within the game remains a challenge. To address this, we
+further introduce the preference hypergraph PG.
+
+Definition 4.2 (Preference Hypergraph): A preference hy-
+pergraph, denoted as PG, is an unweighted directed hyper-
+graph derived from a HyFog G = (V, E, w) and represented
+as (V, (cid:101)E). In PG, for each node i ∈ V, there exists a unique
+outgoing hyperedge (cid:101)ei such that w((cid:101)ei) = maxe∈Ei w(e),
+where Ei is the set of hyperedges that connect to i.
+
+In hyper-preference graph, a node that is the endpoint of
+multiple hyperedges typically indicates a higher cooperative
+ability. We introduce the concept of hyper-preference central-
+ity, denoted by η, to quantify the cooperative ability of each
+node. For any node i ∈ V, the hyper-preference centrality ηi
+is defined as
+
+ηi =
+
+1
+|V| − 1
+
+d(i),
+
+(1)
+
+where d(i) is a centrality metric that quantifies the importance
+or influence of node i within the network.
+
+Intuitively, each hyperedge in (cid:101)E signifies a preference re-
+lationship, with the source node favoring the formation of a
+coalition with the end nodes. This preference arises because
+the source node achieves the highest outcomes when co-
+playing with the end nodes. Fig. 3 provides a schematic
+illustration of the hypergraph representation of HyFog (left)
+and its corresponding preference hypergraph (right). In this
+example, nodes v2 and v3 exhibit the highest cooperative
+capacity, each with a hyper-preference centrality value of 1.
+
+B. Hypergraphic Open-ended Learning Algorithm
+
+We then incorporate the hypergraphic-form game into open-
+ended learning framework and propose HOLA-Drone, which
+continuously adjusts training objectives to enhance coordi-
+nation capabilities among agents. HOLA-Drone consists of
+two main phases: the pre-training phase and the open-ended
+learning phase.
+
+a) Pre-training Phase.: To improve the diversity of poli-
+cies in the hypergraph, we first pre-train a population of drone
+agents and then construct the initial HyFoG G0. Motivated
+
+Fig. 3: Schematic diagrams of hypergraph representation of
+HyFog (left figure) and its preference hypergraph (right fig-
+ure). The hyper-preference centrality is calculated using in-
+degree centrality.
+
+drone pursuit problem extends conventional zero-shot coor-
+dination [4], [5], [9] beyond two-player settings to multi-
+player scenarios. Besides, unlike traditional approaches that
+involve only teammates, this problem introduces the additional
+challenge of adversarial agents (evaders), requiring drones
+to coordinate with unseen teammates while simultaneously
+pursuing opponents.
+
+IV. HYPERGRAPHIC OPEN-ENDED LEARNING ALGORITHM
+
+To address the zero-shot multi-drone pursuit problem, we
+introduce a novel approach named the hypergraphic open-
+ended learning algorithm (HOLA-Drone). In Section IV-A, we
+first introduce the preference hypergraph and hyper-preference
+centrality to model cooperative relationships and assess the
+coordination ability of each agent within the hypergraph. In
+Section IV-B, we provide the details of HOLA-Drone, as
+illustrated in Fig. 2.
+
+A. Preference Hypergraph
+
+We first propose the hypergraphic-form game to model the
+
+interactions in a population of agents.
+
+4.1
+
+Game):
+
+Definition
+
+(Hypergraphic-Form
+
+The
+(HyFoG) G is defined by
+Hypergraphic-Form Game
+tuple (V, E, w, l). V is a finite set of vertices representing
+players, each indexed by i and parameterized by the weights
+of a neural network. E is a set of hyperedges with fixed length
+l. w is a weight vector consisting of the utility obtained for
+each hyperedge connected nodes co-playing.
+
+<latexit sha1_base64="ke99Bl1jhQVkpn7/H7PzcNMMAXI=">AAAB+nicbVDLSsNAFL3xWesr1aWbwaK4KokUdVl0ocsK9gFNCJPppB07eTAzUUrsp7hxoYhbv8Sdf+OkzUJbDwwczrmXe+b4CWdSWda3sbS8srq2Xtoob25t7+yalb22jFNBaIvEPBZdH0vKWURbiilOu4mgOPQ57fijq9zvPFAhWRzdqXFC3RAPIhYwgpWWPLPiHDvICbEaEsyz64l375lVq2ZNgRaJXZAqFGh65pfTj0ka0kgRjqXs2Vai3AwLxQink7KTSppgMsID2tM0wiGVbjaNPkFHWumjIBb6RQpN1d8bGQ6lHIe+nsxDynkvF//zeqkKLtyMRUmqaERmh4KUIxWjvAfUZ4ISxceaYCKYzorIEAtMlG6rrEuw57+8SNqnNfusVr+tVxuXRR0lOIBDOAEbzqEBN9CEFhB4hGd4hTfjyXgx3o2P2eiSUezswx8Ynz+b/pOa</latexit>&Gj……213…<latexit sha1_base64="o+XI5V4B/iwvTSHWzH0XUaavjsM=">AAAB/HicbVDLSsNAFL2pr1pf0S7dBIvgqiRS1GXRjcsK9gFtKJPppB06mYSZiRJC/BU3LhRx64e482+cpFlo64FhDufcy5w5XsSoVLb9bVTW1jc2t6rbtZ3dvf0D8/CoJ8NYYNLFIQvFwEOSMMpJV1HFyCASBAUeI31vfpP7/QciJA35vUoi4gZoyqlPMVJaGpv1UYDUzPPT4qYqfcyysdmwm3YBa5U4JWlAic7Y/BpNQhwHhCvMkJRDx46UmyKhKGYkq41iSSKE52hKhppyFBDppkX4zDrVysTyQ6EPV1ah/t5IUSBlEnh6Mo8ol71c/M8bxsq/clPKo1gRjhcP+TGzVGjlTVgTKghWLNEEYUF1VgvPkEBY6b5qugRn+curpHfedC6arbtWo31d1lGFYziBM3DgEtpwCx3oAoYEnuEV3own48V4Nz4WoxWj3KnDHxifP9AJlYo=</latexit>w<latexit sha1_base64="o+XI5V4B/iwvTSHWzH0XUaavjsM=">AAAB/HicbVDLSsNAFL2pr1pf0S7dBIvgqiRS1GXRjcsK9gFtKJPppB06mYSZiRJC/BU3LhRx64e482+cpFlo64FhDufcy5w5XsSoVLb9bVTW1jc2t6rbtZ3dvf0D8/CoJ8NYYNLFIQvFwEOSMMpJV1HFyCASBAUeI31vfpP7/QciJA35vUoi4gZoyqlPMVJaGpv1UYDUzPPT4qYqfcyysdmwm3YBa5U4JWlAic7Y/BpNQhwHhCvMkJRDx46UmyKhKGYkq41iSSKE52hKhppyFBDppkX4zDrVysTyQ6EPV1ah/t5IUSBlEnh6Mo8ol71c/M8bxsq/clPKo1gRjhcP+TGzVGjlTVgTKghWLNEEYUF1VgvPkEBY6b5qugRn+curpHfedC6arbtWo31d1lGFYziBM3DgEtpwCx3oAoYEnuEV3own48V4Nz4WoxWj3KnDHxifP9AJlYo=</latexit>w<latexit sha1_base64="o+XI5V4B/iwvTSHWzH0XUaavjsM=">AAAB/HicbVDLSsNAFL2pr1pf0S7dBIvgqiRS1GXRjcsK9gFtKJPppB06mYSZiRJC/BU3LhRx64e482+cpFlo64FhDufcy5w5XsSoVLb9bVTW1jc2t6rbtZ3dvf0D8/CoJ8NYYNLFIQvFwEOSMMpJV1HFyCASBAUeI31vfpP7/QciJA35vUoi4gZoyqlPMVJaGpv1UYDUzPPT4qYqfcyysdmwm3YBa5U4JWlAic7Y/BpNQhwHhCvMkJRDx46UmyKhKGYkq41iSSKE52hKhppyFBDppkX4zDrVysTyQ6EPV1ah/t5IUSBlEnh6Mo8ol71c/M8bxsq/clPKo1gRjhcP+TGzVGjlTVgTKghWLNEEYUF1VgvPkEBY6b5qugRn+curpHfedC6arbtWo31d1lGFYziBM3DgEtpwCx3oAoYEnuEV3own48V4Nz4WoxWj3KnDHxifP9AJlYo=</latexit>w<latexit sha1_base64="o+XI5V4B/iwvTSHWzH0XUaavjsM=">AAAB/HicbVDLSsNAFL2pr1pf0S7dBIvgqiRS1GXRjcsK9gFtKJPppB06mYSZiRJC/BU3LhRx64e482+cpFlo64FhDufcy5w5XsSoVLb9bVTW1jc2t6rbtZ3dvf0D8/CoJ8NYYNLFIQvFwEOSMMpJV1HFyCASBAUeI31vfpP7/QciJA35vUoi4gZoyqlPMVJaGpv1UYDUzPPT4qYqfcyysdmwm3YBa5U4JWlAic7Y/BpNQhwHhCvMkJRDx46UmyKhKGYkq41iSSKE52hKhppyFBDppkX4zDrVysTyQ6EPV1ah/t5IUSBlEnh6Mo8ol71c/M8bxsq/clPKo1gRjhcP+TGzVGjlTVgTKghWLNEEYUF1VgvPkEBY6b5qugRn+curpHfedC6arbtWo31d1lGFYziBM3DgEtpwCx3oAoYEnuEV3own48V4Nz4WoxWj3KnDHxifP9AJlYo=</latexit>wLearnerj<latexit sha1_base64="poaNn7PDUgeSzcwSIkksucJl0W0=">AAAB/nicbVDLSsNAFL3xWesrKq7cDBbFjSWRoi6LLnRZwT6gCWEynbRjJw9mJkIJAX/FjQtF3Pod7vwbJ20X2npg4HDOvdwzx084k8qyvo2FxaXlldXSWnl9Y3Nr29zZbck4FYQ2Scxj0fGxpJxFtKmY4rSTCIpDn9O2P7wu/PYjFZLF0b0aJdQNcT9iASNYackz951jBzkhVgOCeXaTe9nDqZ17ZsWqWmOgeWJPSQWmaHjml9OLSRrSSBGOpezaVqLcDAvFCKd52UklTTAZ4j7tahrhkEo3G8fP0ZFWeiiIhX6RQmP190aGQylHoa8ni6By1ivE/7xuqoJLN2NRkioakcmhIOVIxajoAvWYoETxkSaYCKazIjLAAhOlGyvrEuzZL8+T1lnVPq/W7mqV+tW0jhIcwCGcgA0XUIdbaEATCGTwDK/wZjwZL8a78TEZXTCmO3vwB8bnD1IYlRg=</latexit>&Gj 1j213…j-1jCo-PlayPartnersSampleLearner<latexit sha1_base64="sg3Osjp/PPfJVYzuR+fY+tt9N/o=">AAAB+HicbVDLSsNAFL2pr1ofjbp0M1gEVyURUZdFF7qsYB/QhjCZTtuxk0mYmQg15EvcuFDErZ/izr9x0mahrQcGDufcyz1zgpgzpR3n2yqtrK6tb5Q3K1vbO7tVe2+/raJEEtoiEY9kN8CKciZoSzPNaTeWFIcBp51gcp37nUcqFYvEvZ7G1AvxSLAhI1gbyber/RDrMcE8vcn89CHz7ZpTd2ZAy8QtSA0KNH37qz+ISBJSoQnHSvVcJ9ZeiqVmhNOs0k8UjTGZ4BHtGSpwSJWXzoJn6NgoAzSMpHlCo5n6eyPFoVLTMDCTeUy16OXif14v0cNLL2UiTjQVZH5omHCkI5S3gAZMUqL51BBMJDNZERljiYk2XVVMCe7il5dJ+7TuntfP7s5qjauijjIcwhGcgAsX0IBbaEILCCTwDK/wZj1ZL9a79TEfLVnFzgH8gfX5A0UMk4A=</latexit>Gjj+1Sample UpdatePartnersLearnerCo-Play ……GrapherOracleGeneration j<latexit sha1_base64="oMK3+KCLF+dvnaJZyH6VO1ny8pI=">AAACB3icbVDLSsNAFJ3UV62vqEtBBovgqiRS1GXRjcuK9gFNKJPppB06eTBzI5aQnRt/xY0LRdz6C+78GydtFtp6YODMufdw7z1eLLgCy/o2SkvLK6tr5fXKxubW9o65u9dWUSIpa9FIRLLrEcUED1kLOAjWjSUjgSdYxxtf5fXOPZOKR+EdTGLmBmQYcp9TAlrqm4dOQGDk+akTj3jmYAfYA+jvbSS0LeubVatmTYEXiV2QKirQ7JtfziCiScBCoIIo1bOtGNyUSOBUsKziJIrFhI7JkPU0DUnAlJtO78jwsVYG2I+kfiHgqfrbkZJAqUng6c58azVfy8X/ar0E/As35WGcAAvpbJCfCAwRzkPBAy4ZBTHRhFDJ9a6YjogkFHR0FR2CPX/yImmf1uyzWv2mXm1cFnGU0QE6QifIRueoga5RE7UQRY/oGb2iN+PJeDHejY9Za8koPPvoD4zPHxclmhs=</latexit> Solver<latexit sha1_base64="lmzOVIWCWsUwF1soys8pByZk8bA=">AAAB7nicbVBNS8NAEJ3Ur1q/qh69LBahXkIiRXssiuCxgv2ANpTNdtMu3WzS3Y1QQv0PXjwo4tXf481/47bNQVsfDDzem2Fmnh9zprTjfFu5tfWNza38dmFnd2//oHh41FRRIgltkIhHsu1jRTkTtKGZ5rQdS4pDn9OWP7qZ+a1HKhWLxIOexNQL8UCwgBGsjdS6HdtP5ep5r1hybGcOtErcjJQgQ71X/Or2I5KEVGjCsVId14m1l2KpGeF0WugmisaYjPCAdgwVOKTKS+fnTtGZUfooiKQpodFc/T2R4lCpSeibzhDroVr2ZuJ/XifRQdVLmYgTTQVZLAoSjnSEZr+jPpOUaD4xBBPJzK2IDLHERJuECiYEd/nlVdK8sN1Lu3JfKdWuszjycAKnUAYXrqAGd1CHBhAYwTO8wpsVWy/Wu/WxaM1Z2cwx/IH1+QP/o460</latexit>Eq.(8)<latexit sha1_base64="hpnySaJh+/CAhHti5mNvHw101yA=">AAAB63icbVBNS8NAEJ3Ur1q/qh69LBbBU0mkVI9FLx4r2A9oQ9lsN83S3U3Y3Qgl9C948aCIV/+QN/+NmzYHbX0w8Hhvhpl5QcKZNq777ZQ2Nre2d8q7lb39g8Oj6vFJV8epIrRDYh6rfoA15UzSjmGG036iKBYBp71gepf7vSeqNIvlo5kl1Bd4IlnICDa5NEwiNqrW3Lq7AFonXkFqUKA9qn4NxzFJBZWGcKz1wHMT42dYGUY4nVeGqaYJJlM8oQNLJRZU+9ni1jm6sMoYhbGyJQ1aqL8nMiy0nonAdgpsIr3q5eJ/3iA14Y2fMZmkhkqyXBSmHJkY5Y+jMVOUGD6zBBPF7K2IRFhhYmw8FRuCt/ryOule1b1mvfHQqLVuizjKcAbncAkeXEML7qENHSAQwTO8wpsjnBfn3flYtpacYuYU/sD5/AEWdo5I</latexit> <latexit sha1_base64="xRFvcCAHe3sdZK6o49MLG0zyJbM=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0lE1GPRi8eK9gPaUDbbSbt0swm7m0IJ/QlePCji1V/kzX/jts1BWx8MPN6bYWZekAiujet+O4W19Y3NreJ2aWd3b/+gfHjU1HGqGDZYLGLVDqhGwSU2DDcC24lCGgUCW8Hobua3xqg0j+WTmSToR3QgecgZNVZ6HPe8XrniVt05yCrxclKBHPVe+avbj1kaoTRMUK07npsYP6PKcCZwWuqmGhPKRnSAHUsljVD72fzUKTmzSp+EsbIlDZmrvycyGmk9iQLbGVEz1MveTPzP66QmvPEzLpPUoGSLRWEqiInJ7G/S5wqZERNLKFPc3krYkCrKjE2nZEPwll9eJc2LqndVvXy4rNRu8ziKcAKncA4eXEMN7qEODWAwgGd4hTdHOC/Ou/OxaC04+cwx/IHz+QMLko2n</latexit>v1<latexit sha1_base64="V6fAUfvT4bCSSOS4asvlQj3TYH0=">AAAB63icbVBNS8NAEJ3Ur1q/qh69LBbBU0lKUY9FLx4r2FpoQ9lsN+3S3U3YnRRK6V/w4kERr/4hb/4bkzYHbX0w8Hhvhpl5QSyFRdf9dgobm1vbO8Xd0t7+weFR+fikbaPEMN5ikYxMJ6CWS6F5CwVK3okNpyqQ/CkY32X+04QbKyL9iNOY+4oOtQgFo5hJk36t1C9X3Kq7AFknXk4qkKPZL3/1BhFLFNfIJLW267kx+jNqUDDJ56VeYnlM2ZgOeTelmipu/dni1jm5SJUBCSOTlkayUH9PzKiydqqCtFNRHNlVLxP/87oJhjf+TOg4Qa7ZclGYSIIRyR4nA2E4QzlNCWVGpLcSNqKGMkzjyULwVl9eJ+1a1buq1h/qlcZtHkcRzuAcLsGDa2jAPTShBQxG8Ayv8OYo58V5dz6WrQUnnzmFP3A+fwBCLY28</latexit>v2<latexit sha1_base64="b2tEeKlWWv/DNO1wXN9nzf05O4M=">AAAB6nicbVDLTgJBEOzFF+IL9ehlIjHxRHaVqEeiF48Y5ZHAhswOvTBhdnYzM0tCCJ/gxYPGePWLvPk3DrAHBSvppFLVne6uIBFcG9f9dnJr6xubW/ntws7u3v5B8fCooeNUMayzWMSqFVCNgkusG24EthKFNAoENoPh3cxvjlBpHssnM07Qj2hf8pAzaqz0OOpedoslt+zOQVaJl5ESZKh1i1+dXszSCKVhgmrd9tzE+BOqDGcCp4VOqjGhbEj72LZU0gi1P5mfOiVnVumRMFa2pCFz9ffEhEZaj6PAdkbUDPSyNxP/89qpCW/8CZdJalCyxaIwFcTEZPY36XGFzIixJZQpbm8lbEAVZcamU7AheMsvr5LGRdm7KlceKqXqbRZHHk7gFM7Bg2uowj3UoA4M+vAMr/DmCOfFeXc+Fq05J5s5hj9wPn8ADpqNqQ==</latexit>v3<latexit sha1_base64="hO320iBa8sEmbXNNilQxEqLdr0Y=">AAAB6nicbVBNS8NAEJ34WetX1aOXxSJ4KokU9Vj04rGi/YA2lM120y7dbMLupFBCf4IXD4p49Rd589+4bXPQ1gcDj/dmmJkXJFIYdN1vZ219Y3Nru7BT3N3bPzgsHR03TZxqxhsslrFuB9RwKRRvoEDJ24nmNAokbwWju5nfGnNtRKyecJJwP6IDJULBKFrpcdyr9kplt+LOQVaJl5My5Kj3Sl/dfszSiCtkkhrT8dwE/YxqFEzyabGbGp5QNqID3rFU0YgbP5ufOiXnVumTMNa2FJK5+nsio5ExkyiwnRHFoVn2ZuJ/XifF8MbPhEpS5IotFoWpJBiT2d+kLzRnKCeWUKaFvZWwIdWUoU2naEPwll9eJc3LindVqT5Uy7XbPI4CnMIZXIAH11CDe6hDAxgM4Ble4c2Rzovz7nwsWtecfOYE/sD5/AEQHo2q</latexit>v4<latexit sha1_base64="q4OfVUDlmkdclTH49lefZOq9sRg=">AAAB8nicbVBNSwMxEJ31s9avqkcvwSJ4kLKRUr0IRS8eK9gP2C4lm2bb0OxmSbJKWfozvHhQxKu/xpv/xrTdg7Y+GHi8N8PMvCARXBvX/XZWVtfWNzYLW8Xtnd29/dLBYUvLVFHWpFJI1QmIZoLHrGm4EayTKEaiQLB2MLqd+u1HpjSX8YMZJ8yPyCDmIafEWMljPXyOnnr4Gtd6pbJbcWdAywTnpAw5Gr3SV7cvaRqx2FBBtPawmxg/I8pwKtik2E01SwgdkQHzLI1JxLSfzU6eoFOr9FEola3YoJn6eyIjkdbjKLCdETFDvehNxf88LzXhlZ/xOEkNi+l8UZgKZCSa/o/6XDFqxNgSQhW3tyI6JIpQY1Mq2hDw4svLpHVRwbVK9b5art/kcRTgGE7gDDBcQh3uoAFNoCDhGV7hzTHOi/PufMxbV5x85gj+wPn8ASJlj90=</latexit>e1,w1=16<latexit sha1_base64="4g4kc6Gyg/gk4VgIFqO+AQerPqA=">AAAB9HicbVDLSsNAFJ3UV42vqks3g0VwISUp9bERim5cVrAPaEOYTG/aoZOHM5NKCf0ONy4UcevHuPNvnLRZaOuBC4dz7uXee7yYM6ks69sorKyurW8UN82t7Z3dvdL+QUtGiaDQpBGPRMcjEjgLoamY4tCJBZDA49D2RreZ3x6DkCwKH9QkBicgg5D5jBKlJQfc6hl+cqvX1XPTdEtlq2LNgJeJnZMyytFwS1+9fkSTAEJFOZGya1uxclIiFKMcpmYvkRATOiID6GoakgCkk86OnuITrfSxHwldocIz9fdESgIpJ4GnOwOihnLRy8T/vG6i/CsnZWGcKAjpfJGfcKwinCWA+0wAVXyiCaGC6VsxHRJBqNI5ZSHYiy8vk1a1Yl9Uave1cv0mj6OIjtAxOkU2ukR1dIcaqIkoekTP6BW9GWPjxXg3PuatBSOfOUR/YHz+AJOhkAc=</latexit>e2,w2=25<latexit sha1_base64="54J5TTe44LGJM/FF+3xz7xgXF4s=">AAAB83icbVBNS8NAEJ3Ur1q/qh69LBbBg5REgnoRil48VrAf0Iaw2W7apZtN2N0oJfRvePGgiFf/jDf/jZs2B219MPB4b4aZeUHCmdK2/W2VVlbX1jfKm5Wt7Z3dver+QVvFqSS0RWIey26AFeVM0JZmmtNuIimOAk47wfg29zuPVCoWiwc9SagX4aFgISNYG6lPffcMPfnutWNX/GrNrtszoGXiFKQGBZp+9as/iEkaUaEJx0r1HDvRXoalZoTTaaWfKppgMsZD2jNU4IgqL5vdPEUnRhmgMJamhEYz9fdEhiOlJlFgOiOsR2rRy8X/vF6qwysvYyJJNRVkvihMOdIxygNAAyYp0XxiCCaSmVsRGWGJiTYx5SE4iy8vk/Z53bmou/durXFTxFGGIziGU3DgEhpwB01oAYEEnuEV3qzUerHerY95a8kqZg7hD6zPH1mSj/E=</latexit>e4,w4=10<latexit sha1_base64="xRFvcCAHe3sdZK6o49MLG0zyJbM=">AAAB6nicbVBNS8NAEJ3Ur1q/qh69LBbBU0lE1GPRi8eK9gPaUDbbSbt0swm7m0IJ/QlePCji1V/kzX/jts1BWx8MPN6bYWZekAiujet+O4W19Y3NreJ2aWd3b/+gfHjU1HGqGDZYLGLVDqhGwSU2DDcC24lCGgUCW8Hobua3xqg0j+WTmSToR3QgecgZNVZ6HPe8XrniVt05yCrxclKBHPVe+avbj1kaoTRMUK07npsYP6PKcCZwWuqmGhPKRnSAHUsljVD72fzUKTmzSp+EsbIlDZmrvycyGmk9iQLbGVEz1MveTPzP66QmvPEzLpPUoGSLRWEqiInJ7G/S5wqZERNLKFPc3krYkCrKjE2nZEPwll9eJc2LqndVvXy4rNRu8ziKcAKncA4eXEMN7qEODWAwgGd4hTdHOC/Ou/OxaC04+cwx/IHz+QMLko2n</latexit>v1<latexit sha1_base64="V6fAUfvT4bCSSOS4asvlQj3TYH0=">AAAB63icbVBNS8NAEJ3Ur1q/qh69LBbBU0lKUY9FLx4r2FpoQ9lsN+3S3U3YnRRK6V/w4kERr/4hb/4bkzYHbX0w8Hhvhpl5QSyFRdf9dgobm1vbO8Xd0t7+weFR+fikbaPEMN5ikYxMJ6CWS6F5CwVK3okNpyqQ/CkY32X+04QbKyL9iNOY+4oOtQgFo5hJk36t1C9X3Kq7AFknXk4qkKPZL3/1BhFLFNfIJLW267kx+jNqUDDJ56VeYnlM2ZgOeTelmipu/dni1jm5SJUBCSOTlkayUH9PzKiydqqCtFNRHNlVLxP/87oJhjf+TOg4Qa7ZclGYSIIRyR4nA2E4QzlNCWVGpLcSNqKGMkzjyULwVl9eJ+1a1buq1h/qlcZtHkcRzuAcLsGDa2jAPTShBQxG8Ayv8OYo58V5dz6WrQUnnzmFP3A+fwBCLY28</latexit>v2<latexit sha1_base64="b2tEeKlWWv/DNO1wXN9nzf05O4M=">AAAB6nicbVDLTgJBEOzFF+IL9ehlIjHxRHaVqEeiF48Y5ZHAhswOvTBhdnYzM0tCCJ/gxYPGePWLvPk3DrAHBSvppFLVne6uIBFcG9f9dnJr6xubW/ntws7u3v5B8fCooeNUMayzWMSqFVCNgkusG24EthKFNAoENoPh3cxvjlBpHssnM07Qj2hf8pAzaqz0OOpedoslt+zOQVaJl5ESZKh1i1+dXszSCKVhgmrd9tzE+BOqDGcCp4VOqjGhbEj72LZU0gi1P5mfOiVnVumRMFa2pCFz9ffEhEZaj6PAdkbUDPSyNxP/89qpCW/8CZdJalCyxaIwFcTEZPY36XGFzIixJZQpbm8lbEAVZcamU7AheMsvr5LGRdm7KlceKqXqbRZHHk7gFM7Bg2uowj3UoA4M+vAMr/DmCOfFeXc+Fq05J5s5hj9wPn8ADpqNqQ==</latexit>v3<latexit sha1_base64="hO320iBa8sEmbXNNilQxEqLdr0Y=">AAAB6nicbVBNS8NAEJ34WetX1aOXxSJ4KokU9Vj04rGi/YA2lM120y7dbMLupFBCf4IXD4p49Rd589+4bXPQ1gcDj/dmmJkXJFIYdN1vZ219Y3Nru7BT3N3bPzgsHR03TZxqxhsslrFuB9RwKRRvoEDJ24nmNAokbwWju5nfGnNtRKyecJJwP6IDJULBKFrpcdyr9kplt+LOQVaJl5My5Kj3Sl/dfszSiCtkkhrT8dwE/YxqFEzyabGbGp5QNqID3rFU0YgbP5ufOiXnVumTMNa2FJK5+nsio5ExkyiwnRHFoVn2ZuJ/XifF8MbPhEpS5IotFoWpJBiT2d+kLzRnKCeWUKaFvZWwIdWUoU2naEPwll9eJc3LindVqT5Uy7XbPI4CnMIZXIAH11CDe6hDAxgM4Ble4c2Rzovz7nwsWtecfOYE/sD5/AEQHo2q</latexit>v4<latexit sha1_base64="KEK0I1JKU+v9zj5b5kBO3gwAZlQ=">AAAB8nicbVBNSwMxEM3Wr1q/qh69BIvgadmV0noRil48VrAfsF1KNs22odlkSWaFUvozvHhQxKu/xpv/xrTdg7Y+GHi8N8PMvCgV3IDnfTuFjc2t7Z3ibmlv/+DwqHx80jYq05S1qBJKdyNimOCStYCDYN1UM5JEgnWi8d3c7zwxbbiSjzBJWZiQoeQxpwSsFPQYkL5/47m1er9c8VxvAbxO/JxUUI5mv/zVGyiaJUwCFcSYwPdSCKdEA6eCzUq9zLCU0DEZssBSSRJmwuni5Bm+sMoAx0rbkoAX6u+JKUmMmSSR7UwIjMyqNxf/84IM4utwymWaAZN0uSjOBAaF5//jAdeMgphYQqjm9lZMR0QTCjalkg3BX315nbSvXL/mVh+qlcZtHkcRnaFzdIl8VEcNdI+aqIUoUugZvaI3B5wX5935WLYWnHzmFP2B8/kDiUyQHw==</latexit>⌘1=0.67<latexit sha1_base64="1cEhwLUatNaa4NAGE/HZoVDezBE=">AAAB73icbVDLSgNBEJyNrxhfUY9eBoPgKexqUC9C0IvHCOYByRJmJ51kyOzsOtMrhCU/4cWDIl79HW/+jZNkD5pY0FBUddPdFcRSGHTdbye3srq2vpHfLGxt7+zuFfcPGiZKNIc6j2SkWwEzIIWCOgqU0Io1sDCQ0AxGt1O/+QTaiEg94DgGP2QDJfqCM7RSqwPIuufXXrdYcsvuDHSZeBkpkQy1bvGr04t4EoJCLpkxbc+N0U+ZRsElTAqdxEDM+IgNoG2pYiEYP53dO6EnVunRfqRtKaQz9fdEykJjxmFgO0OGQ7PoTcX/vHaC/Ss/FSpOEBSfL+onkmJEp8/TntDAUY4tYVwLeyvlQ6YZRxtRwYbgLb68TBpnZe+iXLmvlKo3WRx5ckSOySnxyCWpkjtSI3XCiSTP5JW8OY/Oi/PufMxbc042c0j+wPn8ASu6j2k=</latexit>⌘3=1<latexit sha1_base64="hFtu6FfLfd9gg/6du72Zxg6/bOs=">AAAB8nicbVBNS8NAEJ34WetX1aOXxSJ4kJK0Rb0IRS8eK9gPSEPYbDft0k027G6UEvozvHhQxKu/xpv/xm2bg7Y+GHi8N8PMvCDhTGnb/rZWVtfWNzYLW8Xtnd29/dLBYVuJVBLaIoIL2Q2wopzFtKWZ5rSbSIqjgNNOMLqd+p1HKhUT8YMeJ9SL8CBmISNYG8mlfu0cPfm166rtl8p2xZ4BLRMnJ2XI0fRLX72+IGlEY004Vsp17ER7GZaaEU4nxV6qaILJCA+oa2iMI6q8bHbyBJ0apY9CIU3FGs3U3xMZjpQaR4HpjLAeqkVvKv7nuakOr7yMxUmqaUzmi8KUIy3Q9H/UZ5ISzceGYCKZuRWRIZaYaJNS0YTgLL68TNrVinNRqd/Xy42bPI4CHMMJnIEDl9CAO2hCCwgIeIZXeLO09WK9Wx/z1hUrnzmCP7A+fwAg+I/c</latexit>e3,w3=20<latexit sha1_base64="BxSa3s5lCzvGj1/thAA2ZqGWMTU=">AAAB73icbVBNS8NAEN34WetX1aOXxSJ4KokU9SIUvXisYD+gDWWznbRLN5u4OxFK6J/w4kERr/4db/4bt20O2vpg4PHeDDPzgkQKg6777aysrq1vbBa2its7u3v7pYPDpolTzaHBYxnrdsAMSKGggQIltBMNLAoktILR7dRvPYE2IlYPOE7Aj9hAiVBwhlZqdwFZr3rt9kplt+LOQJeJl5MyyVHvlb66/ZinESjkkhnT8dwE/YxpFFzCpNhNDSSMj9gAOpYqFoHxs9m9E3pqlT4NY21LIZ2pvycyFhkzjgLbGTEcmkVvKv7ndVIMr/xMqCRFUHy+KEwlxZhOn6d9oYGjHFvCuBb2VsqHTDOONqKiDcFbfHmZNM8r3kWlel8t127yOArkmJyQM+KRS1Ijd6ROGoQTSZ7JK3lzHp0X5935mLeuOPnMEfkD5/MHK7yPaQ==</latexit>⌘4=0<latexit sha1_base64="ngPrpPifZvb93km/ILlEESIOQ0U=">AAAB73icbVDLSgNBEOyNrxhfUY9eBoPgKeyGoF6EoBePEcwDkiXMTnqTIbOz68ysEEJ+wosHRbz6O978GyfJHjSxoKGo6qa7K0gE18Z1v53c2vrG5lZ+u7Czu7d/UDw8auo4VQwbLBaxagdUo+ASG4Ybge1EIY0Cga1gdDvzW0+oNI/lgxkn6Ed0IHnIGTVWanfR0F7l2usVS27ZnYOsEi8jJchQ7xW/uv2YpRFKwwTVuuO5ifEnVBnOBE4L3VRjQtmIDrBjqaQRan8yv3dKzqzSJ2GsbElD5urviQmNtB5Hge2MqBnqZW8m/ud1UhNe+RMuk9SgZItFYSqIicnsedLnCpkRY0soU9zeStiQKsqMjahgQ/CWX14lzUrZuyhX76ul2k0WRx5O4BTOwYNLqMEd1KEBDAQ8wyu8OY/Oi/PufCxac042cwx/4Hz+ACo0j2g=</latexit>⌘2=1
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+
+5
+
+Fig. 4: (a) Schematic diagram of the cooperative drone pursuit environment with 3 pursuers and 2 evaders. (b) Snapshots of the
+real-world experiment from the top view. In timestep (ii) and timestep (iii), the pursuers successfully capture the two evaders,
+respectively.
+
+by maximum entropy RL and MEP [8], we incorporate an
+additional maximum entropy goal into the training objective
+function. This encourages the development of a population of
+agents that can cooperate effectively while employing mutually
+distinct strategies. The objective function is defined as follows:
+
+J(¯π) =
+
+(cid:88)
+
+t
+
+E
+
+(st,at)∼¯π [R (st, at) + αH (¯π (· | st))] ,
+
+(2)
+
+where ¯π represents the mean policy of the population, and
+α ∈ [0, 1] is a balancing constant. This formulation aims to
+maximize the expected return while simultaneously encourag-
+ing policy diversity through the entropy term:
+
+H (¯π (· | st)) = −
+
+(cid:88)
+
+a∈A
+
+¯π(i) (at | st) log ¯π(i) (at | st) .
+
+(3)
+
+b) Open-ended Learning Phase. : After pretraining the
+initial HyFoG, HOLA-Drone begins continuous training by de-
+veloping a best-preferred agent over the current HyFoG. Best-
+preferred agent is defined by the hyper-preference centrality
+η = 1. Intuitively, the best-preferred agent j for agent i (i ̸= j)
+is the one with whom agent i can achieve the highest reward
+compared to all other agents in the population. This reflects
+the agent’s best adaptive coordination ability within the group.
+This process aims to continuously improve the cooperative
+ability among diverse agents.
+
+The first module of HOLA-Drone is the Grapher module,
+which builds the latest HyFoG with the newly generated
+Learner agent. Grapher constructs each hyperedge between
+the newly generated Learner and the l − 1 nodes sampled
+from the previous HyFoG. It then simulates interactions to
+obtain the average result as the weight of each hyperedge.
+Upon completion, this module provides the latest HyFoG and
+the corresponding hyper-preference graph.
+
+The next module, Oracle module, is the core component of
+the HOLA-Drone algorithm. Its purpose is to train the best-
+preferred agent to the newly constructed HyFoG. Formally,
+
+given strategy j and the current HyFoG Gj, the Oracle returns
+a new strategy j + 1:
+
+j + 1 = oracle(j, Gj, Jj), with η(j + 1) = 1,
+
+(4)
+
+where Jj is the objective function. The objective function Jj
+is defined as follows:
+
+Jj = E
+
+π−1
+
+j ∼ϕ(Vj )
+
+E
+
+τ ∼{π1
+
+j ,π−1
+
+j
+
+,πe} [R(τ )] ,
+
+(5)
+
+j
+
+where π−1
+represents the policies of other agents in the
+population sampled from the set of vertices Vj according to
+the distribution ϕ.
+
+The distribution ϕ is derived by the ϕ Solver submodule,
+which measures the cooperative ability of each node in the
+HyFoG. Agents with lower cooperative ability in the hyper-
+graph are assigned a higher probability in the distribution ϕ.
+Thus, the objective function specifically encourages improved
+cooperative performance with those fail-to-collaborate agents,
+enhancing overall coordination ability within the population.
+Specifically, we adapt the inverse of the Myerson value to
+calculate ϕ in HyFoG. The Myerson value ϕ−1 for any player
+i ∈ V in HyFog is calculated as follows:
+
+ϕ−1
+i =
+
+1
+|Π(N )|
+
+(cid:88)
+
+σ∈Π(N )
+
+[v(P σ
+
+i ∪ {i}) − v(P σ
+
+i )],
+
+(6)
+
+where Π(N ) is the set of all permutations defined on N . The
+derivation of Eq. 6 is provided in Appendix VII-A.
+
+The constraint η(j + 1) = 1 in objective function ensures
+that the new strategy j + 1 is the best-preferred agent, in-
+dicating that it has the highest preference centrality within
+the group,
+thus demonstrating a better cooperative ability.
+However, achieving the condition η(j + 1) = 1 is not always
+feasible due to the strictness of this requirement. Thus, in the
+HOLA-Drone framework, we modify the condition to require
+that the preference centrality ranking of j + 1 be within the
+top m. The new approx oracle is defined as:
+
+j+1 = approx oracle(j, Gj, Jj), with f (η(j+1)) > m, (7)
+
+Timestep (i)(a) Capture! Capture! Pursuer Evader Random Pursuer Spawn AreadphohbhswbwowshswsRandom Evader Spawn Areasample Unseen Partner PoolLeanerpursuer₁pursuer₂pursuer₃evader₂evader₁obstacle₂obstacle₁obstacle₃obstacle₄obstacle₅Timestep (ii)Timestep (iii)(b) …
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+
+6
+
+TABLE I: Parameters of experiment setting.
+
+Param.
+
+wb
+hb
+ws
+hs
+wo
+ho
+
+dc
+dp
+ds
+vP
+vE
+
+tmax
+fps
+
+Values
+
+3.6 m
+5 m
+3.2 m
+0.6 m
+0.65 m
+0.1 m
+
+0.2 m
+2 m
+0.1 m
+0.3 m/s
+0.6 m/s
+
+100 s
+10
+
+Description
+
+Boundary Width
+Boundary Height
+Spawn Area Width
+Spawn Area Height
+Obstacle Width
+Obstacle Height
+
+Capture Distance
+Perception Range
+Drone Safe Radius
+Velocity of Pursuers
+Velocity of Evaders
+
+Task Horizon
+Frames Per Second
+
+U
+
+{u1, . . . , u4}
+
+Unseen Partner Pool
+
+where f (·) is the ranking function. The strategy j + 1 is then
+called approximate best-preferred agent.
+
+V. EXPERIMENT
+
+In this work, we conducted a series of experiments to verify
+the effectiveness of our proposed HOLA-Drone method in
+coordinating with unseen partners. Section V-A introduces
+the experimental setup, metrics, baselines, and other relevant
+details. This is followed by an explanation of the unseen
+drone team configurations in Section V-B. The results of the
+experiments and their analysis are presented in Section V-C.
+
+A. Experiment Setting
+
+a) Cooperative Drone Pursuit Environment.: The exper-
+iments are carried out in a cooperative drone pursuit environ-
+ment that features 3 pursuers and 2 evaders, as shown in the
+left of Fig. 4. All drones operate within a rectangular area with
+a boundary width (wb) of 3.6 meters and a boundary height
+(hb) of 5 meters. The task horizon (tmax) is the maximum
+duration of each episode, set to 100 seconds. The simulation
+runs at 10 frames per second (fps), ensuring smooth and
+continuous tracking of drone movements.
+
+At the start of each episode, the three pursuers (p1, p2,
+p3) and two evaders (e1, e2) are randomly spawned in their
+designated areas. The spawn area for each group measures
+3.2 meters in width (ws) and 0.6 meters in height (hs). The
+sky-blue rectangle in Fig. 4 indicates the evaders’ spawn
+area, while the red rectangle indicates the pursuers’ spawn
+area. To introduce additional complexity, the arena features
+five obstacles, each with a width (wo) of 0.65 meters and a
+height (ho) of 0.1 meters. These obstacles are strategically
+placed to influence the movement dynamics of both pursuers
+and evaders. Several critical parameters influence the drones’
+interactions. The capture distance (dc) is set to 0.2 meters,
+which is the threshold distance within which a pursuer is
+considered to have captured an evader. The perception range
+(dp) is 2 meters, defining the radius within which a drone can
+detect others. Each drone also has a safe radius (ds) of 0.1
+meters to avoid collisions. The pursuers move at a velocity
+(vP ) of 0.3 meters per second, while the evaders move faster,
+
+TABLE II: One-evader capture success rate (SR) and average
+episode length (AEL) performance of drone agents in un-
+seen teammate pools: Heterogeneous Pool and Homogeneous
+Pool. The numbers (1) and (2) following PPO and D3QN-G
+represent models trained with different seeds. All results are
+averaged over 50 validation episodes.
+
+Metrics
+
+Homogeneous
+
+Heterogeneous
+
+PPO (1)
+
+PPO (2) Greedy
+
+VICSEK D3QN-G (1)
+
+D3QN-G (2)
+
+SR
+AEL
+
+90.0%
+321.94
+
+72.0%
+466.22
+
+62.0%
+561.78
+
+98.0%
+295.88
+
+80.0%
+435.78
+
+78.0%
+510.34
+
+at a velocity (vE) of 0.6 meters per second. This difference in
+speed necessitates strategic coordination among the pursuers
+to successfully capture the evaders. Finally, the unseen partner
+pool (U) consists of a set of strategies denoted as {u1, . . . , u4},
+which are used to test the zero-shot coordination capabilities
+of the pursuers when teamed with previously unseen partners.
+b) Physical Environment.: To verify our proposed
+HOLA-Drone algorithm beyond simulation, we deploy the
+learned policies of HOLA-Drone with unseen drone team-
+mates in the multi-quadrotor system Crazyflie. We use the
+OptiTrack motion capture system to measure the positions and
+orientations of both pursuers and evaders. Our multi-quadrotor
+communication framework is based on CrazySwarm [41].
+Snapshots of real-world experiments are shown in right of
+Fig. 4.
+
+c) Evader Policy.: The evaders are controlled by the
+escape policy proposed by [42] and [2]. This policy defines
+multiple repulsive forces exerted by the pursuers and obstacles
+on the evaders. Additionally, wall-following rules are incorpo-
+rated to help evaders maneuver along obstacle surfaces when
+positioned between pursuers and obstacles.
+
+d) Baselines and Metrics.: We use the task success rate,
+the collision rate, and the mean episode length as metrics to
+evaluate performance in coordinating with unseen partners.
+The unseen partners will be introduced in further detail in
+Section V-B. An episode is deemed successful if the pursuers
+capture both evaders, defined as reducing the distance between
+an evader and a pursuer to less than 0.2 meters. A collision is
+recorded if the distance between any two pursuers is less than
+0.2 meters or if the distance between a drone and an obstacle is
+less than 0.1 meters. To evaluate the HOLA-Drone algorithm,
+we compare it with self-play (SP) [43], [5], population-based
+training (PBT) [44], [5], fictitious co-play (FCP) [6], and
+maximum entropy population-based training (MEP) [8]. All
+methods, including HOLA-Drone, are implemented using the
+PPO algorithm [45]. The action space is continuous, ranging
+from 0 to 1, and determines the drone’s direction, while the
+drone’s velocity remains fixed and predefined. Further details
+of implementation are available in Appendix VII-B.
+
+B. Unseen Drone Teammate Pools
+
+To evaluate the cooperative capabilities of our pro-
+posed HOLA-Drone algorithm with previously unencountered
+drones, we establish two separate unseen drone teammate
+pools - homogeneous pool and heterogeneous pool. The agents
+in the homogeneous pool are trained using a self-play PPO
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+
+7
+
+Fig. 5: Comparison of Task Success Rate (first column, higher is better), Collision Rate (second column, lower is better), and
+Mean Episode Length (third column, lower is better) among four baseline methods, one ablation method HOLA-DroneR, and
+our proposed HOLA-Drone in the 3-Pursuer-2-Evader Scenario when playing with both Homogeneous Teammates (HoT) and
+Random Heterogeneous Teammates (HeT). The first row depicts the performances with two homogeneous teammates. The
+results for the SP method (slashed bar) are obtained from co-playing with the same algorithms and should be excluded from
+the comparison. The second row shows the results obtained from co-playing with random teammates sampled from an unseen
+teammate pool. The means and standard deviations, indicated by the error bars, are calculated over three different random
+seeds, with each seed undergoing 50 repeated runs.
+
+algorithm [45], [5] with two different seeds. Table II presents
+the mean success rate for capturing an evader (SR) and the
+average episode length (AEL) of the two PPO agents when
+co-playing with themselves. The PPO (1) agent is an expert
+pursuer, achieving a 90% SR and a shorter AEL. In contrast,
+the PPO (2) agent is a medium-level pursuer with a 72% SR.
+
+To verify cooperative ability with different algorithms, we
+establish a heterogeneous unseen drone agent pool consisting
+of four models: a Greedy agent, a VICSEK agent [42], and two
+D3QN-G agents. The D3QN-G agent is an ensemble algorithm
+that combines the Double Deep Q-Network (D3QN) [46]
+with the Greedy strategy. This approach is based on our
+experimental findings, which showed that while D3QN alone
+struggles with the 3-Pursuer-2-Evader task, it can effectively
+handle it when combined with the Greedy strategy. More
+details of four models are provided in Appendix VII-C. As
+shown in Table II, the ability of these agents ranges from the
+low-level Greedy strategy with a 62% SR, to the medium-
+level D3QN-G models with approximately 80% SR, and
+the expert-level VICSEK strategy with a 98% SR. At each
+evaluation, we randomly sample two teammates from the pool
+to test zero-shot coordination ability. This approach allows us
+to comprehensively evaluate cooperative pursuit performance
+with teammates of varying skill levels.
+
+C. Experiment Results
+
+Fig. 5 provides a comprehensive comparison of the coor-
+dination abilities of the proposed HOLA-Drone algorithm,
+four baselines (SP, PBT, FCP, and MEP), and an ablation
+model HOLA-DroneR, which removes the ϕ Solver module
+and uses the inverse mean reward as ϕ. The results of
+the experiment verify the effectiveness of ϕ Solve module
+and demonstrate the our proposed HOLA-Drone algorithm
+achieves better performance when cooperating with unseen
+teammates in both homogeneous and heterogeneous settings
+compared to the baseline methods. Additionally, the real-world
+experiment further validates the feasibility of HOLA-Drone in
+physical systems, as shown in Fig. 5 and in the videos on our
+website.
+
+a) Ablation Study: the Effectiveness of ϕ Solver Module.:
+To evaluate the effectiveness of the ϕ Solver module within
+the HOLA-Drone algorithm, we conduct an ablation study by
+removing the ϕ Solver, named HOLA-DroneR. Instead, we
+use the inverse of the mean reward of each node achieved
+with other nodes as the distribution ϕ. The results, depicted
+in Fig. 5, demonstrate a notable difference in performance
+between the HOLA-Drone (red bar) and the ablation model
+HOLA-DroneR (gold bar). When the ϕ Solver module is
+removed, we observe a decrease in the Pursuit Success Rate, as
+well as an increase in the Collision Rate and the Mean Episode
+Length, for both homogeneous and random heterogeneous
+teammate configurations.
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+
+8
+
+b) Coordination with Homogeneous Teammates.: The
+first row of Fig. 5 shows the performance across three metrics
+when cooperating with unseen homogeneous teammates. The
+results demonstrate the superior performance of HOLA-Drone
+compared to other baselines when coordinating with unseen
+homogeneous teammates. The results for the SP method are
+specifically marked with slashes, indicating that these results
+are obtained by co-playing with the same algorithm, unlike
+other methods that co-play with entirely different algorithms.
+As a result, SP achieves the best overall performance compared
+to other baselines and HOLA-Drone. For instance, the mean
+episode length of SP is 597.09, which is lower than the
+second-lowest method, HOLA-Drone, at 611.58. Under the
+same evaluation criteria for coordination with unseen partners,
+HOLA-Drone outperforms the other baselines. Compared to
+the second-best method, MEP, HOLA-Drone shows about a
+10% improvement in the pursuit success rate. Additionally, the
+mean episode length of HOLA-Drone is 611.58, significantly
+shorter than second-best model MEP’s 764.75.
+
+c) Coordination with Random Heterogeneous Team-
+mates.: In addition to evaluating with homogeneous unseen
+teammates, we assess the cooperative ability with random
+heterogeneous teammates. As described in Section V-B and
+Appendix VII-C, the heterogeneous unseen pool consists of
+four different drone agents whose cooperative abilities range
+from medium to expert
+the beginning of each
+levels. At
+evaluation, we randomly sample two teammates from this
+pool. This process is repeated 50 times for each seed. The
+bottom figures in Fig. 5 compare the performance of HOLA-
+Drone with other baselines across three metrics. Compared
+to the baseline methods, HOLA-Drone achieves the best
+performance in all three metrics. The mean episode lengths
+for all four baselines are greater than 800, with the shortest
+being the FCP method at 801.19. In contrast, the mean episode
+length for HOLA-Drone is significantly shorter at 663.72.
+Additionally, HOLA-Drone outperforms the baselines in terms
+of success and collision rates, with a success rate of 82% and
+a collision rate of 13.67%. This is compared to the second-
+best method, FCP, which has a success rate of 72%, and
+PBT, which has a collision rate of 22.67%. When coordinating
+with more complex and diverse unseen teammates, HOLA-
+Drone achieves more significant improvements than in the
+homogeneous teammates setting.
+
+VI. CONCLUSION
+In this paper, we propose a hypergraphic open-ended learn-
+ing algorithm (HOLA-Drone) to address the zero-shot co-
+operative multi-drone pursuit problem, enabling coordination
+with unseen drone partners. To the best of our knowledge,
+this is the first work to formulate the cooperative multi-drone
+pursuit task as zero-shot multi-agent coordination problem
+within the Dec-POMDP framework. This formulation extends
+ZSC research from two-player video games to real-world
+multi-drone cooperative pursuit scenarios. We introduce a
+novel hypergraphic open-ended learning algorithm that contin-
+uously enhances the learner’s cooperative ability with multiple
+teammates. To empirically verify the effectiveness of HOLA-
+Drone in coordinating with unseen teammates, we construct
+
+two unseen drone teammate pools for evaluation, comprising
+both homogeneous and heterogeneous teammates. Experimen-
+tal results in both simulation and a real-world cooperative
+Crazyflie pursuit environment demonstrate that HOLA-Drone
+can better coordinate with unseen teammates compared to
+baseline methods.
+
+Limitations and Future Work: While our study demon-
+strates the effectiveness of HOLA-Drone in achieving zero-
+shot coordination with unseen drone partners, several limita-
+tions warrant further investigation. Firstly, although collision
+avoidance is considered in the reward function, some pursuers
+exhibit aggressive and dangerous behaviors to capture evaders.
+Future work should focus on incorporating more sophisticated
+safety mechanisms to ensure robust and reliable performance
+in real-world applications. While the deployment of HOLA-
+Drone policies in Crazyflie 2.1 drones validates its feasibility
+in physical systems, scalability remains a challenge. Future
+research could explore optimizing HOLA-Drone for larger
+swarms and more complex tasks. Finally, integrating advanced
+sensors and communication protocols could enhance the co-
+ordination and efficiency of drone swarms, addressing the
+current variability in hardware capabilities and further bridging
+the gap between simulation and real-world applications.
+
+REFERENCES
+
+[1] T. H. Chung, G. A. Hollinger, and V. Isler, “Search and pursuit-evasion
+in mobile robotics: A survey,” Autonomous robots, vol. 31, pp. 299–316,
+2011.
+
+[2] Z. Zhang, D. Zhang, Q. Zhang, W. Pan, and T. Hu, “DACOOP-A:
+Decentralized adaptive cooperative pursuit via attention,” IEEE Robotics
+and Automation Letters, vol. PP, pp. 1–8, 11 2023.
+
+[3] J. P. Queralta, J. Taipalmaa, B. C. Pullinen, V. K. Sarker, T. N.
+Gia, H. Tenhunen, M. Gabbouj, J. Raitoharju, and T. Westerlund,
+“Collaborative multi-robot search and rescue: Planning, coordination,
+perception, and active vision,” Ieee Access, vol. 8, pp. 191617–191643,
+2020.
+
+[4] H. Hu, A. Lerer, A. Peysakhovich, and J. Foerster, ““Other-play”
+for zero-shot coordination,” in Proceedings of the 37th International
+Conference on Machine Learning (H. D. III and A. Singh, eds.), vol. 119
+of Proceedings of Machine Learning Research, pp. 4399–4410, PMLR,
+13–18 Jul 2020.
+
+[5] M. Carroll, R. Shah, M. K. Ho, T. Griffiths, S. Seshia, P. Abbeel,
+and A. Dragan, “On the utility of learning about humans for human-
+ai coordination,” Advances in neural information processing systems,
+vol. 32, 2019.
+
+[6] D. Strouse, K. McKee, M. Botvinick, E. Hughes, and R. Everett,
+“Collaborating with humans without human data,” Advances in Neural
+Information Processing Systems, vol. 34, pp. 14502–14515, 2021.
+[7] A. Lupu, B. Cui, H. Hu, and J. Foerster, “Trajectory diversity for zero-
+shot coordination,” in Proceedings of the 38th International Conference
+on Machine Learning (M. Meila and T. Zhang, eds.), vol. 139 of
+Proceedings of Machine Learning Research, pp. 7204–7213, PMLR,
+18–24 Jul 2021.
+
+[8] R. Zhao, J. Song, Y. Yuan, H. Hu, Y. Gao, Y. Wu, Z. Sun, and W. Yang,
+“Maximum entropy population-based training for zero-shot human-ai
+coordination,” in Thirty-Seventh AAAI Conference on Artificial Intelli-
+gence, AAAI 2023, Thirty-Fifth Conference on Innovative Applications of
+Artificial Intelligence, IAAI 2023, Thirteenth Symposium on Educational
+Advances in Artificial Intelligence, EAAI 2023, Washington, DC, USA,
+February 7-14, 2023 (B. Williams, Y. Chen, and J. Neville, eds.),
+pp. 6145–6153, AAAI Press, 2023.
+
+[9] Y. Li, S. Zhang, J. Sun, Y. Du, Y. Wen, X. Wang, and W. Pan,
+“Cooperative open-ended learning framework for zero-shot coordina-
+tion,” in Proceedings of the 40th International Conference on Machine
+Learning (A. Krause, E. Brunskill, K. Cho, B. Engelhardt, S. Sabato,
+and J. Scarlett, eds.), vol. 202 of Proceedings of Machine Learning
+Research, pp. 20470–20484, PMLR, 23–29 Jul 2023.
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+
+9
+
+[10] L. Yuan, Z. Zhang, L. Li, C. Guan, and Y. Yu, “A survey of progress on
+cooperative multi-agent reinforcement learning in open environment,”
+arXiv preprint arXiv:2312.01058, 2023.
+
+[11] J. D. Madden and R. C. Arkin, “Modeling the effects of mass and age
+variation in wolves to explore the effects of heterogeneity in robot team
+composition,” in 2011 IEEE International Conference on Robotics and
+Biomimetics, pp. 663–670, Dec. 2011.
+
+[12] C. Muro, R. Escobedo, L. Spector, and R. P. Coppinger, “Wolf-pack
+(Canis lupus) hunting strategies emerge from simple rules in computa-
+tional simulations,” Behavioural Processes, vol. 88, pp. 192–197, Nov.
+2011.
+
+[13] L. Angelani, “Collective Predation and Escape Strategies,” Phys. Rev.
+
+Lett., vol. 109, no. 11, 2012.
+
+[14] Z. Zhou, W. Zhang, J. Ding, H. Huang, D. M. Stipanovi´c, and C. J.
+Tomlin, “Cooperative pursuit with Voronoi partitions,” Automatica,
+vol. 72, pp. 64–72, Oct. 2016.
+
+[15] A. Pierson, Z. Wang, and M. Schwager, “Intercepting Rogue Robots:
+An Algorithm for Capturing Multiple Evaders With Multiple Pursuers,”
+IEEE Robotics and Automation Letters, vol. 2, pp. 530–537, Apr. 2017.
+Conference Name: IEEE Robotics and Automation Letters.
+
+[16] K. Shah and M. Schwager, “Multi-agent Cooperative Pursuit-Evasion
+Strategies Under Uncertainty,” in Distributed Autonomous Robotic Sys-
+tems (N. Correll, M. Schwager, and M. Otte, eds.), (Cham), pp. 451–468,
+Springer International Publishing, 2019.
+
+[17] L. Matignon, G. J. Laurent, and N. Le Fort-Piat, “Hysteretic Q-learning :
+an algorithm for Decentralized Reinforcement Learning in Cooperative
+Multi-Agent Teams,” in 2007 IEEE/RSJ International Conference on
+Intelligent Robots and Systems, pp. 64–69, Oct. 2007. ISSN: 2153-0866.
+[18] S. Li, Y. Wu, X. Cui, H. Dong, F. Fang, and S. Russell, “Robust Multi-
+Agent Reinforcement Learning via Minimax Deep Deterministic Policy
+Gradient,” Proceedings of the AAAI Conference on Artificial Intelligence,
+vol. 33, pp. 4213–4220, July 2019. Number: 01.
+
+[19] S. Qi, X. Huang, P. Peng, X. Huang, J. Zhang, and X. Wang, “Cascaded
+Attention: Adaptive and Gated Graph Attention Network for Multiagent
+Reinforcement Learning,” IEEE Transactions on Neural Networks and
+Learning Systems, vol. 35, pp. 3769–3779, Mar. 2024. Conference
+Name: IEEE Transactions on Neural Networks and Learning Systems.
+[20] C. de Souza, R. Newbury, A. Cosgun, P. Castillo, B. Vidolov,
+and D. Kuli´c, “Decentralized Multi-Agent Pursuit Using Deep Rein-
+forcement Learning,” IEEE Robotics and Automation Letters, vol. 6,
+pp. 4552–4559, July 2021. Conference Name: IEEE Robotics and
+Automation Letters.
+
+[21] N. Bard, J. N. Foerster, S. Chandar, N. Burch, M. Lanctot, H. F.
+Song, E. Parisotto, V. Dumoulin, S. Moitra, E. Hughes, et al., “The
+hanabi challenge: A new frontier for ai research,” Artificial Intelligence,
+vol. 280, p. 103216, 2020.
+
+[22] G. Tesauro, “Td-gammon, a self-teaching backgammon program,
+achieves master-level play,” Neural computation, vol. 6, no. 2, pp. 215–
+219, 1994.
+
+[23] A. Lupu, B. Cui, H. Hu, and J. Foerster, “Trajectory diversity for zero-
+shot coordination,” in International Conference on Machine Learning
+(ICML), pp. 7204–7213, PMLR, 2021.
+
+[24] R. Canaan, X. Gao, J. Togelius, A. Nealen, and S. Menzel, “Generating
+
+and adapting to diverse ad-hoc partners in hanabi,” 2022.
+
+[25] R. Charakorn, P. Manoonpong, and N. Dilokthanakul, “Generating
+diverse cooperative agents by learning incompatible policies,” in The
+Eleventh International Conference on Learning Representations, 2023.
+[26] Z. Zhang, X. Wang, Q. Zhang, and T. Hu, “Multi-robot cooperative
+pursuit via potential field-enhanced reinforcement learning,” in 2022 In-
+ternational Conference on Robotics and Automation (ICRA), pp. 8808–
+8814, 2022.
+
+[27] J. Xiao, J. H. Chee, and M. Feroskhan, “Real-time multi-drone detection
+and tracking for pursuit-evasion with parameter search,” IEEE Transac-
+tions on Intelligent Vehicles, pp. 1–11, 2024.
+
+[28] R. Srivastava, B. Steunebrink, M. Stollenga, and J. Schmidhuber,
+“Continually adding self-invented problems to the repertoire: First
+experiments with powerplay,” 11 2012.
+
+[29] O.-E. L. Team, A. Stooke, A. Mahajan, C. Barros, C. Deck, J. Bauer,
+J. Sygnowski, M. Trebacz, M. Jaderberg, M. Mathieu, N. McAleese,
+N. Bradley-Schmieg, N. Wong, N. Porcel, R. Raileanu, S. Hughes-
+Fitt, V. Dalibard, and W. M. Czarnecki, “Open-ended learning leads
+to generally capable agents,” ArXiv, vol. abs/2107.12808, 2021.
+[30] R. Meier and A. Mujika, “Open-ended reinforcement learning with
+neural reward functions,” in ICLR Workshop on Agent Learning in Open-
+Endedness, 2022.
+
+[31] J. D. Madden, R. C. Arkin, and D. R. MacNulty, “Multi-robot system
+based on model of wolf hunting behavior to emulate wolf and elk
+
+interactions,” in 2010 IEEE International Conference on Robotics and
+Biomimetics, pp. 1043–1050, Dec. 2010.
+
+[32] M. Janosov, C. Vir´agh, G. V´as´arhelyi, and T. Vicsek, “Group chasing
+tactics: how to catch a faster prey,” New J. Phys., vol. 19, p. 053003,
+May 2017. Publisher: IOP Publishing.
+
+[33] Z. Mu, J. Pan, Z. Zhou, J. Yu, and L. Cao, “A survey of the
+pursuit–evasion problem in swarm intelligence,” Front Inform Technol
+Electron Eng, vol. 24, pp. 1093–1116, Aug. 2023.
+
+[34] E. Garcia, Z. E. Fuchs, D. Milutinovic, D. W. Casbeer, and M. Pachter,
+“A Geometric Approach for the Cooperative Two-Pursuer One-Evader
+Differential Game,” IFAC-PapersOnLine, vol. 50, pp. 15209–15214, July
+2017.
+
+[35] M. Kothari, J. G. Manathara, and I. Postlethwaite, “Cooperative Multiple
+Pursuers against a Single Evader,” J Intell Robot Syst, vol. 86, pp. 551–
+567, June 2017.
+
+[36] S. Y. Hayoun and T. Shima, “A Two-on-One Linear Pursuit–Evasion
+Game with Bounded Controls,” J Optim Theory Appl, vol. 174, pp. 837–
+857, Sept. 2017.
+
+[37] L. Zhang, J. Li, Y. Zhu, H. Shi, and K.-S. Hwang, “Multi-agent rein-
+forcement learning by the actor-critic model with an attention interface,”
+Neurocomputing, vol. 471, pp. 275–284, Jan. 2022.
+
+[38] A. Lerer and A. Peysakhovich, “Learning social conventions in Markov
+
+games,” 2018.
+
+[39] K. Xue, Y. Wang, L. Yuan, C. Guan, C. Qian, and Y. Yu, “Heterogeneous
+
+multi-agent zero-shot coordination by coevolution,” 2022.
+
+[40] A. Mahajan, M. Samvelyan, T. Gupta, B. Ellis, M. Sun, T. Rockt¨aschel,
+and S. Whiteson, “Generalization in cooperative multi-agent systems,”
+2022.
+
+[41] J. A. Preiss, W. H¨onig, G. S. Sukhatme, and N. Ayanian, “Crazyswarm:
+A large nano-quadcopter swarm.” https://github.com/USC-ACTLab/
+crazyswarm, 2017. Accessed: 2024-06-05.
+
+[42] M. Janosov, C. Vir´agh, G. V´as´arhelyi, and T. Vicsek, “Group chasing
+tactics: How to catch a faster prey,” New Journal of Physics, vol. 19,
+05 2017.
+
+[43] J. Schulman, X. Chen, and P. Abbeel, “Equivalence between policy
+gradients and soft q-learning,” arXiv preprint arXiv:1704.06440, 2017.
+[44] M. Jaderberg, V. Dalibard, S. Osindero, W. M. Czarnecki, J. Don-
+ahue, A. Razavi, O. Vinyals, T. Green, I. Dunning, K. Simonyan,
+et al., “Population based training of neural networks,” arXiv preprint
+arXiv:1711.09846, 2017.
+
+[45] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov,
+
+“Proximal policy optimization algorithms,” 2017.
+
+[46] Z. Wang, T. Schaul, M. Hessel, H. Hasselt, M. Lanctot, and N. Freitas,
+“Dueling network architectures for deep reinforcement learning,” in
+International conference on machine learning, pp. 1995–2003, PMLR,
+2016.
+
+VII. APPENDIX
+
+This appendix provides additional information and support-
+ing materials that complement the main content of the paper.
+
+A. Derivation of Eq. 6
+
+In the module of ϕ Solver, we adapt the inverse of the
+Myerson value to calculate ϕ in HyFoG. The Myerson value
+ϕ−1 for any player i ∈ V in HyFog is calculated as follows:
+ϕ−1
+i = SVi(N , vE )
+1
+|Π(N )|
+
+i ∪ {i}) − vE (P σ
+
+[vE (P σ
+
+(8b)
+
+(8a)
+
+i )]
+
+(cid:88)
+
+=
+
+σ∈Π(N )
+
+=
+
+1
+|Π(N )|
+
+=
+
+1
+|Π(N )|
+
+(cid:88)
+
+
+
+
+
+(cid:88)
+
+v(T ) −
+
+(cid:88)
+
+σ∈Π(N )
+
+T ∈P σ
+
+i ∪{i}\E
+
+T ∈P σ
+
+i \E
+
+(cid:88)
+
+[v(P σ
+
+i ∪ {i}) − v(P σ
+
+i )]
+
+σ∈Π(N )
+
+
+
+v(T )
+
+
+
+(8c)
+
+(8d)
+
+The transition from Eq. 8c to Eq. 8d occurs because HyFoG
+is connected, ensuring that any subset S ⊆ N is also
+
+
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+
+10
+
+TABLE III: Implementation hyperparameters of HOLA-Drone.
+
+Parameters
+
+Values
+
+Parameters
+
+Batch size
+Lambda (λ)
+Learning rate
+Entropy coefficien t(ϵclip)
+Total environment step
+
+1024
+0.99
+3e-4
+0.01
+1e6
+
+Minibatch size
+Generalized advantage estimation lambda (λgae)
+Value loss coefficient(c1)
+PPO epoch
+Max hypergraph size
+
+Values
+
+256
+0.95
+1
+20
+10
+
+product of 8 λ candidate parameters and 3 η candidate
+parameters, following the setting in [2]. The parameter η
+is used to calculate the repulsive force, while λ is used to
+calculate the inter-robot force. The state dimension in the
+training environment is 9. In addition to the information
+mentioned in the Greedy strategy,
+it also includes a
+bit indicating whether the current agent is active. If a
+teammate captures the target, the teammate transitions
+from an active state to an inactive state, thereby ceasing
+movement.
+
+i ∪{i}, E) and (P σ
+
+connected. In this context, the components of the hypergraph
+(P σ
+i , E) remain unchanged. For any coalition
+S ⊆ N , if |S| < r, the value of the coalition v(S) = 0.
+Otherwise, when |S| ≥ r, v(S) = (cid:80)
+T ∈△(S) w(T ), where
+△(S) denotes the subset of S with a fixed size of r.
+
+B. Implementation Details of HOLA-Drone
+
+In this section, we outline the hyperparameters used in
+the implementation of HOLA-Drone algorithm. The selection
+of these hyperparameters is crucial for the effective training
+and performance of the algorithm. Table III summarizes the
+specific values for each parameter used in our experiments.
+
+C. Heterogeneous Unseen Drone Teammate Pool
+
+In this section, we will further introduce details of the
+heterogeneous unseen drone teammate pool, consisting of four
+models: a Greedy agent, a VICSEK agent, and two D3QN-G
+agents. The details of the four agents are as follows:
+
+• Greedy Agent. The Greedy agent pursues the target in-
+dependently, continually adjusting its movement to align
+with the target’s position. Its state information includes
+its own position and orientation, distances and angles to
+teammates and evaders, and proximity to obstacles or
+walls. If obstacles or other pursuers are detected within
+its evasion range, the agent adjusts its direction to avoid
+them.
+
+• VICSEK Agent. Inspired by research on group chasing
+tactics [42], this strategy involves continuously comput-
+ing and updating the velocity vector directed towards the
+evader based on the agent’s current environmental state
+to optimize the tracking path. When the agent detects po-
+tential obstacles or other chasers nearby, it automatically
+evades them by applying repulsive forces with varying
+magnitudes and coefficients. Although the final velocity
+vector includes both magnitude and orientation, only the
+orientation is implemented in this experiment.
+
+• D3QN-G Agent. The D3QN-G agent is an ensemble
+algorithm that combines the Double Deep Q-Network
+the
+(D3QN) [46] with the Greedy strategy. Initially,
+D3QN-G agent employs the D3QN method to pursue
+one of the evaders. Once the first evader is captured, it
+switches to the Greedy strategy to capture the second
+evader. This approach is based on our experimental
+findings, which showed that while D3QN alone struggles
+with the 3-Pursuer-2-Evader task, it can effectively handle
+it when combined with the Greedy strategy. The action
+space consists of 24 artificial potential field with attention
+(APF-A) parameter pairs (λ, η), formed by the Cartesian

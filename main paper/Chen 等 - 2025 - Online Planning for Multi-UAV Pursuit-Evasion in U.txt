@@ -1,0 +1,1064 @@
+Multi-UAV Pursuit-Evasion with Online Planning in Unknown
+Environments by Deep Reinforcement Learning
+
+Jiayu Chen1,∗, Chao Yu1,∗(cid:66), Guosheng Li1, Wenhao Tang1, Xinyi Yang1,
+
+Botian Xu2, Huazhong Yang1, Yu Wang1(cid:66)
+
+4
+2
+0
+2
+
+p
+e
+S
+5
+2
+
+]
+
+O
+R
+.
+s
+c
+[
+
+2
+v
+6
+6
+8
+5
+1
+.
+9
+0
+4
+2
+:
+v
+i
+X
+r
+a
+
+Abstract— Multi-UAV pursuit-evasion, where pursuers aim
+to capture evaders, poses a key challenge for UAV swarm
+intelligence. Multi-agent reinforcement learning (MARL) has
+demonstrated potential in modeling cooperative behaviors, but
+most RL-based approaches remain constrained to simplified
+simulations with limited dynamics or fixed scenarios. Previous
+attempts to deploy RL policy to real-world pursuit-evasion
+are largely restricted to two-dimensional scenarios, such as
+ground vehicles or UAVs at fixed altitudes. In this paper,
+we address multi-UAV pursuit-evasion by considering UAV
+dynamics and physical constraints. We introduce an evader
+prediction-enhanced network to tackle partial observability
+in cooperative strategy learning. Additionally, we propose an
+adaptive environment generator within MARL training, enabling
+higher exploration efficiency and better policy generalization
+across diverse scenarios. Simulations show our method sig-
+nificantly outperforms all baselines in challenging scenarios,
+generalizing to unseen scenarios with a 100% capture rate.
+Finally, we derive a feasible policy via a two-stage reward
+refinement and deploy the policy on real quadrotors in a
+zero-shot manner. To our knowledge, this is the first work
+to derive and deploy an RL-based policy using collective thrust
+and body rates control commands for multi-UAV pursuit-
+evasion in unknown environments. The open-source code and
+videos are available at https://sites.google.com/view/
+pursuit-evasion-rl.
+
+I. INTRODUCTION
+
+Multi-UAV pursuit-evasion, where teams of pursuers at-
+tempt to capture evaders while the evaders employ evasive
+strategies to avoid capture, is a key application of UAV
+swarms. Multi-UAV pursuit-evasion has important applica-
+tions in both military and civilian contexts, including UAV
+defense systems [1], adversarial drone engagements [2], and
+search-and-rescue [3].
+
+Traditional approaches to solving pursuit-evasion games,
+such as game theory [4], control theory [5], [6], [7], [8], [9],
+[10], and heuristic methods [11], [12], [13], face significant
+limitations when applied to complex real-world scenarios.
+These methods require accurate and reasonable knowledge
+of models and initial conditions [14], which may struggle
+to handle the nonlinear dynamics and high-dimensional
+environments typically encountered in practical applications.
+
+∗ Equal contribution.
+(cid:66) Corresponding Authors. {yuchao,yu-wang}@tsinghua.edu.
+
+cn
+
+1Department of Electronic Engineering, Tsinghua University, Beijing,
+
+100084, China.
+
+2 Work done as an intern in Tsinghua University
+This research was supported by National Natural Science Foundation of
+China (No.62406159, 62325405), China Postdoctoral Science Foundation
+under Grant Number GZC20240830, 2024T170496.
+
+As a result, researchers have increasingly turned to artificial
+intelligence (AI) techniques, with reinforcement learning
+(RL) emerging as a leading solution[15], [16], [17], [18],
+[19]. RL enables UAVs to iteratively learn pursuit and
+evasion strategies by interacting with simulated environments.
+By leveraging neural networks, RL can model complex,
+cooperative behaviors and discover strategies that are difficult
+to encode using explicit rules.
+
+However, despite these advancements, most RL-based
+methods for pursuit-evasion focus on simplified tasks in
+simulation [20], [21], [22], [23], [24]. These methods fre-
+quently model agents, both pursuers and evaders, as point
+masses or with limited kinematic properties, developing
+only high-level strategies. Such abstractions overlook the
+kinematic and dynamic constraints of real-world systems,
+limiting the effectiveness of these strategies outside simulation
+environments. Moreover, many RL approaches are tailored to
+fixed, predefined scenarios, reducing their ability to generalize
+to diverse and unknown scenarios [15], [20], [25]. Although
+recent work has explored deploying RL-based pursuit-evasion
+strategies in real-world settings [26], [25], [9], [27], these
+efforts have primarily been restricted to two-dimensional
+tasks, such as ground vehicles or UAVs constrained to fixed
+altitudes, without addressing the complexities of real three-
+dimensional environments.
+
+This paper aims to learn an RL policy for multi-UAV
+pursuit-evasion, perform online planning in unknown envi-
+ronments, and deploy it on real UAVs. The problems are:
+
+• Joint optimization of planning and control: UAV
+actions must be coordinated to capture the evader under
+partial observation, while avoiding environmental obsta-
+cles, preventing collisions, and adhering to dynamics
+model and physical constraints for safe and feasible
+flight.
+
+• Large exploration space: The 3D nature of UAVs,
+combined with varying scenarios, significantly expands
+the state space, resulting in a large number of samples
+required to find viable strategies using RL.
+
+• Policy generalization: RL strategies that are optimized
+for specific scenarios often fail to generalize to new
+environments.
+
+• Sim-to-real transfer: The sim-to-real gap, a common
+issue in RL, is particularly pronounced in multi-UAV
+pursuit-evasion tasks due to the physical constraints of
+UAVs and the need for agile, precise maneuvers.
+
+We address these challenges by incorporating dynamics
+
+
+
+
+
+
+
+
+models and physical constraints into training policy for multi-
+UAV pursuit-evasion tasks. The RL-based policy generates
+collective thrust and body rates (CTBR) control commands,
+balancing maneuverability, cooperative decision-making, and
+sim-to-real transfer. We propose an attention-based, evader-
+prediction-enhanced network that integrates predictive infor-
+mation about the evader’s movements into the RL policy
+inputs, improving the ability to cooperatively capture the
+evader with partial observation. Additionally, we introduce
+an adaptive environment generator to MARL training, which
+automatically generates diverse and appropriately challenging
+curricula. This boosts sample efficiency and enhances policy
+generalization to unseen scenarios.
+
+We evaluate performance across four test scenarios, with
+results showing that our method outperforms all baselines with
+a clear margin and maintains a 100% capture rate in unseen
+scenarios, demonstrating strong generalization. Ablation
+studies show our approach improves sample efficiency by
+over 50%. Finally, we employ a two-stage reward refinement
+process to ensure the policy adheres to physical constraints
+and deploy it on real Crazyflie quadrotors in a zero-shot
+manner. To the best of our knowledge, this is the first RL
+policy with CTBR commands that accounts for dynamics
+models and physical constraints in pursuit-evasion tasks and
+can be deployed directly on real quadrotors in unknown
+environments. The open-source code and videos can be found
+on our website https://sites.google.com/view/
+pursuit-evasion-rl.
+
+II. RELATED WORK
+
+In pursuit-evasion games, one or more pursuers aim to
+capture one or more evaders, while the evaders actively avoid
+capture, distinguishing this from search strategies where the
+target is passive[28]. Traditional research in this area can be
+broadly categorized into game-theoretic, control-theoretic, and
+heuristic approaches[14]. Game-theoretic methods simplify
+the problem into mathematical models, primarily focusing on
+differential games[4]. Control-theoretic approaches model the
+nonlinear dynamics of the pursuit, optimizing strategies using
+the Hamilton-Jacobi-Isaacs equation[5], [6], [7]. Heuristic
+methods design forces to guide pursuers—such as attraction to
+the evader and repulsion from teammates and obstacles—and
+often utilize optimization techniques like particle swarm op-
+timization (PSO)[10] and artificial potential fields (APF)[13].
+However, these traditional methods have limitations in real-
+world applications due to the gap between their simple system
+modelling and real UAVs, and the difficulty of handling
+complex cooperative strategies.
+
+Reinforcement learning (RL) has emerged as a powerful
+data-driven approach for solving multi-agent coordination
+problems in pursuit-evasion games[25], [20], [21], [22],
+[23], [24]. Several studies have applied RL to enhance
+traditional methods[25] or address issues such as varying
+agent numbers[21], efficient communication[20], and credit
+assignment[29]. However, most RL research remains limited
+to simplified simulation environments, where agents are
+modeled as particles or constrained by limited kinematics,
+
+(a) Partially observable scenario
+
+(b) Sim. environment
+
+Fig. 1: Setup of multi-UAV pursuit-evasion.
+
+reducing the effectiveness of these strategies in real-world
+scenarios. While recent work has explored deploying RL-
+based strategies in pursuit-evasion tasks[26], [25], [9], [27],
+these efforts have largely been confined to two-dimensional
+environments, such as ground vehicles, surface vehicles or
+UAVs at fixed altitudes.
+
+In this paper, we consider the UAV dynamics model
+and physical constraints, introducing an evader-prediction
+enhanced network and an adaptive environment generator to
+address the challenges of large exploration space and policy
+generalization to unseen scenarios. The learned RL policy is
+capable of zero-shot deployment to real quadrotors.
+
+III. PRELIMINARY
+
+A. Pursuit-evasion Problem
+
+As shown in Fig. 1a, the multi-UAV pursuit-evasion prob-
+lem involves N UAVs chasing a faster evader in an obstacle-
+filled environment. The UAVs aim to capture the evader
+quickly while avoiding obstacles. The evader is captured if
+it comes within the capture radius of a UAV. Detection is
+possible only if no obstacles block the line of sight. When
+detected, the UAV can pass information to its teammates.
+The evader, controlled using a potential field method [27],
+experiences repulsive forces from UAVs, obstacles, and arena
+boundaries, with force inversely proportional to distance.
+
+B. Problem Formulation
+
+We formulate the multi-UAV pursuit-evasion task as
+decentralized, partially observable Markov decision processes
+(Dec-POMDPs), M =< N , S, A, O, S0, P, R, γ > with the
+state space S, the joint action space A, the observation space
+O, the space of initial states S0, the transition probability P,
+reward function R and the discount factor γ. N ≡ {1, ..., N }
+is a set of N UAVs. oi = O(s; i) denotes the observation for
+the UAV i under state s ∈ S.
+
+The goal of our work is to construct a policy that
+performs well across diverse scenarios. The task space T
+defines a series of Dec-POMDPs with similar properties.
+We use a parameter space W to represent the inter-task
+variation of T . We generate the corresponding initial states
+by a task parameter w ∈ W. In our setup, w comprises
+the initial positions of the UAVs and the evader, as well
+as the number and positions of obstacles. We consider
+homogeneous UAVs and learn a parameter-sharing policy
+πθ parameterized by θ to output action ai ∼ πθ(·|oi) for
+UAV i. The final objective J(θ) is to maximize the expected
+accumulative reward for any task parameter w ∈ W, i.e.,
+
+droneevaderdetectedcatchradiusblockedobstacle
+Fig. 2: Pipeline of our method. We begin by calibrating the parameters of the quadrotor dynamics model through system
+identification. Next, we introduce an Adaptive Environment Generator to automatically generate tasks for policy training and
+employ an Evader Prediction-Enhanced Network for efficient capture. Finally, with two-stage reward refinement, the learned
+policy is directly transferred to real quadrotors in a zero-shot manner.
+
+J(θ) = Ew∼W [(cid:80)
+actions at timestep t.
+
+t γtR(st, at; w) | w], where at is joint
+
+C. Quadrotor Model
+
+In this paper, we use quadrotors, one of the most widely
+used UAV, as our physical platform. The quadrotor is assumed
+to be a 6 degree-of-freedom rigid body of mass m and
+diagonal moment of inertia matrix I = diag(Ix, Iy, Iz). The
+dynamics of the quadrotor are modeled by the differential
+equation: ˙x = [ ˙pT , ˙qT , ˙vT , ˙ωT ], where the quadrotor state
+x ∈ R13 consists the position p,
+the orientation q in
+quaternions, the linear velocity v and the angular velocity ω.
+The acceleration of the quadrotor is described as
+
+
+
+
+
+
+
+
+˙v =
+
+
+
+ + R
+
+
+
+ ,
+
+(1)
+
+0
+0
+−g
+
+0
+0
+j fj/m
+
+(cid:80)
+
+in the world frame with gravity g. fj is the force generated
+by the j-th rotor. R is the rotation matrix from the body
+frame to the world frame.
+
+The angular acceleration calculated by Euler’s rotation
+equation in the body frame is ˙ω = I −1(τ − ω × (Iω)).
+The torques τ acting in the body frame are determined by
+τ = (cid:80)
+j τj + rpos,j × fj, where τj is the torques generated
+by the j-th rotor, rpos,j is the position of the rotor j expressed
+in the body frame. We model the rotational speeds of the
+four motors Ωj as first-order system with time constant Tm
+where the commanded motor speeds Ωcmd are the input, i.e.,
+˙Ωj = Tm(Ωcmd,j−Ωj). The force and torque produced by the
+2.
+j-th rotor are modeled as follows: fj = kf Ωj
+
+2, τj = kmΩj
+
+IV. METHODOLOGY
+
+The pipeline of our method is shown in Fig. 2. To minimize
+the sim-to-real gap, we first calibrate the parameters of the
+quadrotor dynamics model via system identification, which
+are then integrated into the GPU-parallel simulator [30]
+to construct the multi-UAV pursuit-evasion task. We use
+collective thrust and body rates (CTBR) as control commands
+
+and train RL policy to output it via a SOTA MARL algorithm,
+MAPPO [31]. To enhance active exploration under partial
+observability, we design an Evader Prediction-Enhanced
+Network that leverages an attention-based architecture to
+capture the interrelations within observations and a trajectory
+prediction network to forecast the evader’s movement. To
+further enhance sample efficiency and policy generalization,
+we propose an Adaptive Environment Generator to automati-
+cally generate curricula, enabling efficient exploration of the
+entire task space. Finally, with reward refinement, the learned
+policy is applied directly to real quadrotors without any real
+data fine-tuning.
+
+In the following sections, we first present the basic MARL
+setup, then detail the Evader Prediction-Enhanced Network
+architecture, the Adaptive Environment Generator design, and
+the two-stage reward refinement.
+
+A. Multi-Agent Reinforcement Learning Setup
+
+Observation Space. The observation oi for quadrotor
+i is composed of three components: the self-information
+oself , states of other quadrotors oother and information about
+obstacles oob. oself consists of its orientation in quaternions,
+the linear velocity, the real and predicted future relative
+position to the evader. If the evader is not detected by any
+of the quadrotors, we mask the real relative position with a
+marker value. oother contains the relative positions to other
+quadrotors. oob denotes the relative positions to the k-nearest
+obstacles, where k is smaller than the maximum number
+of obstacles, representing the quadrotor’s inability to sense
+global information about environments.
+
+Action Space. We adopt collective thrust and body rates
+(CTBR) commands as policy actions to ensure agile control,
+cooperative decision-making, and robust sim-to-real transfer.
+These CTBR commands are subsequently executed by a low-
+level PID controller. Concretely, the action for quadrotor i is
+expressed as ai = (F, ωroll, ωpitch, ωyaw), where F ∈ [0, 1]
+indicates the collective thrust, and ω ∈ [−π, π] signifies the
+body rates for the corresponding axes.
+
+Real worldSysIDTwo-Stage Reward RefinementDynamics Modelmassinertia…SimulationAdaptive Environment GeneratorLow-level controllerGenerated environmentsDeployEnvironmentsDronesEvader Prediction-Enhanced NetworkCritic NetworkActor NetworkevaderdroneobstacleStatesCommandValue(cid:3427)𝑭,𝝎𝒓𝒐𝒍𝒍.𝝎𝒑𝒊𝒕𝒄𝒉,𝝎𝒚𝒂𝒘(cid:3431)EvaderPredictionNetworktime step
+Algorithm 1: Training with Adaptive Environment
+Generator
+Input: θ, p, Qactive, σmin, σmax;
+Output: final policy πθ;
+Qactive ← {};
+repeat
+
+// Local expansion and global
+
+exploration.
+
+Wenv ← sample tasks from Qactive with
+probability p and obtain expanded tasks w by
+Expand, else w ∼ Unif(W) with probability
+1 − p;
+// Train the policy πθ.
+Train and evaluate πθ with Wenv via MARL;
+// select task parameters from
+
+Wenv
+
+Wnew ← Selection(Wenv, σmin, σmax);
+Add Wnew to the active archive Qactive;
+
+until πθ converges;
+
+Fig. 4: Design of the Adaptive Environment Generator.
+
+emphasize self-information, the self-embeddings hself are
+added to hattn and passed through an MLP to generate the
+final feature h. In the actor network, actions are parameterized
+using a Gaussian distribution based on h. For the critic
+network, h is input into an MLP to produce a scalar value
+representing the estimated state value.
+
+C. Adaptive Environment Generator
+
+We aim to derive an RL policy that generalizes well to
+unknown environments. While domain randomization [32] is
+commonly used to improve generalization, directly randomiz-
+ing task parameters requires a large number of samples and
+may struggle in complex tasks (see Sec. V-E). To address this,
+we propose an adaptive environment generator that efficiently
+navigates vast exploration space and integrates it into MARL
+training, as outlined in Algo. 1.
+
+As shown in Fig. 4, we generate parallel simulation
+environments by Local Expansion and Global Exploration.
+The Local Expansion is responsible for improving the ability
+of quadrotors to effectively capture the evader from any
+starting position in a scenario with a fixed number and location
+of obstacles. We maintain an active archive Qactive to store
+task parameters w of environments that the current policy still
+needs to solve. Then, we generate expanded tasks from seed
+
+Fig. 3: Attention-based observation encoder.
+
+Reward Function. The team-based reward function en-
+courages quadrotors to capture the evader cooperatively while
+avoiding obstacles, consisting of four components: capture
+reward, distance reward, collision penalty, and smoothness
+reward. The capture reward motivates quadrotors to work
+together to capture the evader. If the evader falls within the
+capture radius of any quadrotor, all quadrotors receive a
+bonus of 2. The distance reward helps guide the quadrotor
+closer to the evader, applying a penalty, with a coefficient of
+−0.1, proportional to the distance between the quadrotor and
+the evader. A collision penalty discourages quadrotors from
+getting too close to obstacles, imposing a significant penalty of
+−10 if they breach a safety threshold. Finally, the smoothness
+reward promotes stable and efficient quadrotor actions by
+encouraging minimal changes in control inputs between time
+steps. It is defined as e−||at−at−1||, where at−at−1 represents
+the variation of commands output by the policy.
+
+B. Evader Prediction-Enhanced Network
+
+In the evader prediction-enhanced network, we first build
+an Evader Prediction Network that predicts the evader’s future
+trajectories based on historical observations, facilitating the
+learning of cooperative pursuit strategies under partial obser-
+vation. The predicted trajectories, concatenated with the raw
+observations, are then fed into the Actor and Critic Networks.
+These networks utilize an attention-based observation encoder
+to better capture the relationships between different entities.
+1) Evader Prediction Network: We use an LSTM to predict
+the evader’s trajectory for the next K timesteps. The input
+consists of n-step historical data, including the positions of
+all quadrotors, the positions and velocities of the evader, and
+the current timestep. If the evader is blocked by an obstacle
+and undetected by any quadrotor, we use a marker value
+to replace the evader’s positions and velocities. To train the
+network, we collect data over n + K timesteps during the
+rollout phase, using the first n timesteps as inputs X and the
+subsequent n + 1 to n + K timesteps as labels Y . The evader
+prediction network Pϕ is trained via supervised learning, and
+the loss is defined as Lϕ = E(Y − Pϕ(X))2.
+
+2) Actor and Critic Networks: The actor and critic net-
+works are based on the attention-based observation encoder,
+as illustrated in Fig. 3. The raw observation of quadrotor i
+consists of three components: oself , oother, and oob. The
+predicted trajectory of the evader is concatenated into oself .
+Each component is separately encoded using distinct MLPs,
+producing embeddings of 128 dimensions each. A multi-head
+self-attention module is employed to capture the relationships
+between these embeddings, resulting in features hattn. To
+
+Evaderprediction𝒐𝒔𝒆𝒍𝒇𝒐𝒅𝒓𝒐𝒔𝒕𝒉𝒔𝒆𝒍𝒇MLP𝒐𝒐𝒕𝒉𝒆𝒓𝒐𝒐𝒃𝒐𝒔𝒕𝒉𝒐𝒃𝒐𝒔𝒕𝒉𝒐𝒕𝒉𝒆𝒓𝒉Self-AttentionattnscoreMLPQKV𝒉𝒂𝒕𝒕𝒏𝒉𝒔𝒆𝒍𝒇MLPMLPMLPAddAdaptiveEnvironmentGeneratorTaskspaceGlobalExplorationGeneratedenvironments𝑾𝒆𝒏𝒗RandomtasksLocalExpansion𝑺𝒆𝒍𝒆𝒄𝒕𝒊𝒐𝒏ExpandedtasksSeedtasksExpandedtasksActivearchive𝑬𝒙𝒑𝒂𝒏𝒅
+tasks sampling from the active archive by applying noise in
+the parameter space W. We define the process of expansion
+as Expand. Specifically, for a particular seed task w, the
+expanded task is generated by introducing noise ϵ ∈ [−δ, δ]
+to the dimensions associated with both the quadrotors and the
+evader while leaving the obstacle-related dimensions unaltered.
+For the updating process of Qactive, defined as Selection, we
+execute the current policy in the generated environments
+Wenv and obtain a set Cenv of task success rates for all
+environments. We introduce two hyper-parameters σmin and
+σmax and include the task parameters satisfying the criterion
+into the active archive Qactive, i.e.,
+
+Qactive ← {w|σmin ≤ c ≤ σmax, c ∈ Cenv, w ∈ Wenv}.
+
+(2)
+Note that the hyper-parameters σmin and σmax are easy to
+tune due to their interpretation as bounds on the task success
+rate. In our setup, σmin = 0.5 and σmax = 0.9. The updating
+process of Qactive continuously increases the complexity of
+tasks, leading to automatic curriculum generation.
+
+The Global Exploration is used for continuous exploration
+of the entire task space, improving the ability of quadrotors
+to capture the evader under different obstacle placements. We
+randomly sample task parameters from the whole parameter
+space W,
+i.e., randomly set up the initial positions of
+quadrotors and the evader, as well as the quantities and
+positions of obstacles. Finally, we select task parameters
+by Local Expansion with probability p, while those from
+Global Exploration are selected with probability 1 − p. In
+our experiments, we choose p = 0.7.
+
+D. Two-stage Reward Refinement
+
+Since the reward function has multiple objectives, obtaining
+a feasible policy for real-world deployment is challenging. To
+ensure the policy meets physical constraints and is deployable
+in practice, we use a two-stage reward refinement process.
+Specifically, in the first stage, we initially exclude the smooth-
+ness reward and focus on the other three rewards. In the
+second stage, we gradually introduce the smoothness reward
+coefficient, ensuring a high success rate while improving the
+smoothness of actions.
+
+V. EXPERIMENT
+
+A. Experiment Setting
+
+We construct the task using OmniDrones [30], a high-
+speed UAV simulator for RL policy training. The simulation
+environment, illustrated in Fig. 1b, is an arena with a radius
+of 0.9 and a maximum height of 1.2. The arena contains 4 to
+5 randomly placed cylindrical obstacles, each with a radius
+of 0.1 and a height of 1.2. To avoid collisions, the distance
+between UAVs and between UAVs and obstacles must exceed
+0.07. The setup includes 3 quadrotors, each with a maximum
+speed of 1.0, while the evader moves at a constant speed
+of 1.3. The capture radius is set at 0.3, and the maximum
+episode length is 800.
+
+Fig. 5: Illustration of four test scenarios.
+
+B. Evaluation
+
+Evaluation Scenarios. We design four test scenarios
+(Fig. 5), illustrated in a top-down view. The within-distribution
+scenarios, Wall and Narrow gap, are intended to challenge
+the pursuit strategy. The two out-of-distribution scenarios,
+Random and Passage, are designed to evaluate the method’s
+generalization to unseen environments.
+
+Evaluation Metrics. We use three statistical metrics to
+evaluate pursuit strategies: Capture Rate, Capture Step, and
+Collision Rate. Each experiment is averaged over 300 testing
+episodes (100 per seed).
+
+• Capture Rate: Percentage of successful episodes where
+the evader is captured before the maximum episode
+length. Higher values indicate better performance.
+• Capture Step: Average timestep of first capture. If
+not captured, the maximum episode length is recorded.
+Lower values indicate quicker capture.
+
+• Collision Rate: Average number of collisions between
+quadrotors and obstacles or other quadrotors per episode
+length. Lower values indicate safer pursuit.
+
+C. Baselines
+
+We challenge our method with three heuristic methods
+(Angelani, Janosov, and APF) and a RL-based method
+(DACOOP).
+
+• Angelani [11]: Pursuers are attracted to the nearest
+
+particles of the opposing group, i.e., the evader.
+
+• Janosov [12]: Janosov designs a greedy chasing strategy
+and collision avoidance system that accounts for inertia,
+time delay, and noise.
+
+• APF [13]: APF guides pursuers to a target position
+by combining attractive, repulsive, and inter-individual
+forces. By setting the target of the pursuers to the
+evader’s position and adjusting the hyperparameters for
+these forces, the pursuers can navigate towards the evader
+while avoiding obstacles.
+
+• DACOOP [25]: DACOOP employs RL to adjust the
+primary hyperparameters of APF, enabling effective
+adaptation to diverse scenarios.
+
+For heuristic methods, we perform grid search on hyperpa-
+rameters in the training scenarios. For DACOOP, we use the
+same MARL algorithm (MAPPO) and hyperparameters as our
+approach. Baselines, treating the quadrotor as a point mass,
+outputs velocity commands executed by a velocity controller.
+
+D. Simulation Results
+
+Quantitative Results. Tab. I shows the performance across
+four test scenarios. In the Wall and Narrow Gap scenarios,
+our method achieves over 95% capture rate, with the lowest
+collision rate and fewest capture timesteps, demonstrating
+
+WallRandomPassageNarrowGap
+Scenarios
+
+Metrics
+
+Angelani
+
+Janosov
+
+APF
+
+DACOOP
+
+Ours
+
+Cap. Rate↑
+
+0.008(0.003)
+
+0.009(0.002)
+
+0.010(0.005)
+
+0.205(0.007)
+
+0.977(0.033)
+
+Wall
+
+Cap. Step↓
+
+798.0(000.8)
+
+797.0(000.8)
+
+797.0(001.4)
+
+744.0(009.1)
+
+306.4(084.6)
+
+Coll. Rate↓
+
+0.010(0.000)
+
+0.010(0.000)
+
+0.010(0.000)
+
+0.040(0.008)
+
+0.000(0.000)
+
+Cap. Rate↑
+
+0.213(0.012)
+
+0.219(0.012)
+
+0.253(0.012)
+
+0.447(0.017)
+
+0.953(0.037)
+
+Narrow Gap
+
+Cap. Step↓
+
+755.0(004.5)
+
+757.7(004.2)
+
+743.0(002.2)
+
+553.0(002.2)
+
+510.1(131.6)
+
+Coll. Rate↓
+
+0.094(0.001)
+
+0.077(0.001)
+
+0.085(0.000)
+
+0.039(0.002)
+
+0.028(0.040)
+
+Cap. Rate↑
+
+0.277(0.002)
+
+0.145(0.019)
+
+0.314(0.018)
+
+0.563(0.016)
+
+1.000(0.000)
+
+Random
+
+Cap. Step↓
+
+639.0(001.6)
+
+716.0(012.0)
+
+620.0(014.8)
+
+488.67(008.7)
+
+315.7(069.6)
+
+Coll. Rate↓
+
+0.015(0.001)
+
+0.018(0.002)
+
+0.022(0.002)
+
+0.020(0.000)
+
+0.011(0.013)
+
+Cap. Rate↑
+
+0.733(0.010)
+
+0.009(0.003)
+
+0.229(0.027)
+
+0.818(0.027)
+
+1.000(0.000)
+
+Passage
+
+Cap. Step↓
+
+552.7(005.0)
+
+799.3(000.5)
+
+750.3(007.4)
+
+533.7(008.8)
+
+275.9(056.0)
+
+Coll. Rate↓
+
+0.000(0.000)
+
+0.001(0.000)
+
+0.001(0.000)
+
+0.001(0.000)
+
+0.006(0.008)
+
+TABLE I: Results of all methods in test scenarios. Our approach significantly outperforms all baselines in unseen scenarios.
+
+more effective cooperation in within-distribution tasks. In
+the Random and Passage scenarios, our method reaches
+a 100% capture rate, outperforming the baselines (56.3%
+and 81.8%) and requires the fewest capture steps. While
+the collision rate in Passage is slightly higher, it remains
+low at 0.6%. These out-of-distribution results show our
+policy’s strong generalization to unseen scenarios. We observe
+poor baseline performance and further test the algorithms
+in simpler, obstacle-free scenarios. Baselines show a sharp
+decline in the capture rate as the capture radius decreases,
+highlighting the difficulty of our task. In contrast, our method
+maintains a high capture rate, further proving its stronger
+cooperative capture ability. More analysis is available on our
+website.
+
+Behavior Analysis. We observe four emergent behaviors
+in the test scenarios, which further illustrate the cooperative
+pursuit capabilities of our strategy. The corresponding video
+can be found in the supplementary materials. In Wall scenario,
+our approach achieves a double-sided surround strategy, where
+one quadrotor maintains surveillance while the other two
+approach the evader from both flanks. In contrast, baseline
+methods struggle to find a path to the evader quickly due
+to obstacles directly ahead. In Narrow Gap scenario, unlike
+the baselines, which continuously follow the evader, our
+approach learns to take a shortcut and intercept the evader at
+its inevitable path. In Random scenario, none of the drones
+detect the evader initially. Guided by the predicted evader
+trajectory, our method swiftly navigates behind obstacles,
+successfully locating the evader hidden there. In Passage
+scenario, our approach divides the quadrotors into three
+groups to block all possible escape routes for the evader.
+In contrast, baseline methods tend to greedily approach the
+evader, leaving an escape route open.
+
+E. Abaltion Studies
+
+We conduct ablation studies on the core modules of our
+method, as shown in Fig. 6. “Ours w/o AEG” denotes the re-
+moval of the Adaptive Environment Generator, using random
+environment parameters instead. “Ours w/o EPN” refers to
+the removal of the Evader Prediction Network, where the RL
+
+policy input lacks predicted trajectories. “MAPPO” indicates
+the removal of both the Adaptive Environment Generator and
+the Evader Prediction Network. Our method demonstrates
+the best sample efficiency, with an improvement of over
+50%. “MAPPO” achieves only an 80% capture rate with 1.5
+billion samples and exhibits large variance, highlighting the
+challenging nature of deriving an RL policy that considers
+UAV dynamics and performs well across diverse scenarios.
+“Ours w/o EPN” shows a lower
+capture rate, indicating that in-
+tegrating evader trajectory pre-
+diction information into the RL
+policy input effectively guides
+UAVs to cooperatively capture
+the evader under partial observa-
+tions. Although “Ours w/o AEG”
+achieves a comparable capture
+rate, it requires twice samples,
+demonstrating that
+significantly enhances sample efficiency.
+
+the Adaptive Environment Generator
+
+Fig. 6: Ablation studies.
+
+F. Real-World Deployment
+
+We further deploy the policy on three real CrazyFlie 2.1
+quadrotors, each with a maximum speed limited to 1.0 m/s.
+A motion capture system is used to obtain the quadrotors’
+states. We utilize a virtual evader and input its true states to
+the actor and the evader prediction network when the evader
+is detected. The actor and evader prediction network run on
+a local computer, which sends CTBR control commands at
+100 Hz to the quadrotors via radio. Real-world experiments
+demonstrate that our method produces strategies consistent
+with those in the simulation, validating the feasibility of the
+capture policy on real quadrotors. A video is included in the
+supplementary materials.
+
+VI. CONCLUSION
+
+We learn a feasible RL policy that can perform online
+planning in unknown environment for multi-UAV pursuit-
+evasion and deploy it on real quadrotors. We introduce an
+Adaptive Environment Generator to automatically generate
+
+0.00.51.01.5Timesteps1e90.00.20.40.60.81.0Capture rateOursOurs w/o AEGOurs w/o EPNMAPPO
+[21] L. Xu, B. Hu, Z. Guan, X. Cheng, T. Li, and J. Xiao, “Multi-agent
+deep reinforcement learning for pursuit-evasion game scalability,” in
+Proceedings of 2019 Chinese Intelligent Systems Conference: Volume
+I 15th. Springer, 2020, pp. 658–669.
+
+[22] M. Hüttenrauch, S. Adrian, G. Neumann, et al., “Deep reinforcement
+learning for swarm systems,” Journal of Machine Learning Research,
+vol. 20, no. 54, pp. 1–31, 2019.
+
+[23] N.-M. T. Kokolakis and K. G. Vamvoudakis, “Safety-aware pursuit-
+evasion games in unknown environments using gaussian processes and
+finite-time convergent reinforcement learning,” IEEE Transactions on
+Neural Networks and Learning Systems, vol. 35, no. 3, pp. 3130–3143,
+2022.
+
+[24] D. Liu, Q. Zong, X. Zhang, R. Zhang, L. Dou, and B. Tian, “Game of
+drones: Intelligent online decision making of multi-uav confrontation,”
+IEEE Transactions on Emerging Topics in Computational Intelligence,
+2024.
+
+[25] Z. Zhang, X. Wang, Q. Zhang, and T. Hu, “Multi-robot cooperative
+pursuit via potential field-enhanced reinforcement learning,” in 2022
+International Conference on Robotics and Automation (ICRA).
+IEEE,
+2022, pp. 8808–8814.
+
+[26] R. Zhang, Q. Zong, X. Zhang, L. Dou, and B. Tian, “Game of drones:
+Multi-uav pursuit-evasion game with online motion planning by deep
+reinforcement learning,” IEEE Transactions on Neural Networks and
+Learning Systems, 2022.
+
+[27] C. De Souza, R. Newbury, A. Cosgun, P. Castillo, B. Vidolov, and
+D. Kuli´c, “Decentralized multi-agent pursuit using deep reinforcement
+learning,” IEEE Robotics and Automation Letters, vol. 6, no. 3, pp.
+4552–4559, 2021.
+
+[28] V. Isler, S. Kannan, and S. Khanna, “Randomized pursuit-evasion in
+a polygonal environment,” IEEE Transactions on Robotics, vol. 21,
+no. 5, pp. 875–884, 2005.
+
+[29] W. Gan, X. Qu, D. Song, and P. Yao, “Multi-usv cooperative chasing
+strategy based on obstacles assistance and deep reinforcement learning,”
+IEEE Transactions on Automation Science and Engineering, pp. 1–16,
+2023.
+
+[30] B. Xu, F. Gao, C. Yu, R. Zhang, Y. Wu, and Y. Wang, “Omnidrones:
+An efficient and flexible platform for reinforcement learning in drone
+control,” arXiv preprint arXiv:2309.12825, 2023.
+
+[31] C. Yu, A. Velu, E. Vinitsky, Y. Wang, A. Bayen, and Y. Wu, “The
+surprising effectiveness of ppo in cooperative, multi-agent games,”
+arXiv preprint arXiv:2103.01955, 2021.
+
+[32] J. Tobin, R. Fong, A. Ray, J. Schneider, W. Zaremba, and P. Abbeel,
+“Domain randomization for transferring deep neural networks from sim-
+ulation to the real world,” in 2017 IEEE/RSJ international conference
+on intelligent robots and systems (IROS).
+
+IEEE, 2017, pp. 23–30.
+
+curricula for policy generalization across diverse scenarios
+and employ an Evader Prediction-Enhanced Network for coop-
+eratively capture. Simulations show our method significantly
+outperforms all baselines and generalizes to unseen scenarios.
+Future work will consider vision-based pursuit-evasion tasks.
+
+REFERENCES
+
+[1] V. Turetsky and J. Shinar, “Missile guidance laws based on pursuit–
+evasion game formulations,” Automatica, vol. 39, no. 4, pp. 607–618,
+2003.
+
+[2] J. M. Eklund, J. Sprinkle, and S. S. Sastry, “Switched and symmetric
+pursuit/evasion games using online model predictive control with
+application to autonomous aircraft,” IEEE Transactions on Control
+Systems Technology, vol. 20, no. 3, pp. 604–620, 2011.
+
+[3] D. W. Oyler, P. T. Kabamba, and A. R. Girard, “Pursuit–evasion games
+in the presence of obstacles,” Automatica, vol. 65, pp. 1–11, 2016.
+[4] R. Vidal, O. Shakernia, H. J. Kim, D. H. Shim, and S. Sastry, “Proba-
+bilistic pursuit-evasion games: theory, implementation, and experimental
+evaluation,” IEEE transactions on robotics and automation, vol. 18,
+no. 5, pp. 662–669, 2002.
+
+[5] D. Ye, M. Shi, and Z. Sun, “Satellite proximate pursuit-evasion game
+with different thrust configurations,” Aerospace science and technology,
+vol. 99, p. 105715, 2020.
+
+[6] X. Fang, C. Wang, L. Xie, and J. Chen, “Cooperative pursuit with
+multi-pursuer and one faster free-moving evader,” IEEE transactions
+on cybernetics, vol. 52, no. 3, pp. 1405–1414, 2020.
+
+[7] B. Tian, P. Li, H. Lu, Q. Zong, and L. He, “Distributed pursuit of an
+evader with collision and obstacle avoidance,” IEEE Transactions on
+Cybernetics, vol. 52, no. 12, pp. 13 512–13 520, 2021.
+
+[8] H. Huang, W. Zhang, J. Ding, D. M. Stipanovi´c, and C. J. Tomlin,
+“Guaranteed decentralized pursuit-evasion in the plane with multiple
+pursuers,” in 2011 50th IEEE Conference on Decision and Control
+and European Control Conference.
+
+IEEE, 2011, pp. 4835–4840.
+
+[9] A. Pierson, Z. Wang, and M. Schwager, “Intercepting rogue robots:
+An algorithm for capturing multiple evaders with multiple pursuers,”
+IEEE Robotics and Automation Letters, vol. 2, no. 2, pp. 530–537,
+2016.
+
+[10] R. Palm and A. Bouguerra, “Particle swarm optimization of potential
+fields for obstacle avoidance,” in Recent advances in robotics and
+mechatronics, 2013, pp. 117–123.
+
+[11] L. Angelani, “Collective predation and escape strategies,” Physical
+
+review letters, vol. 109, no. 11, p. 118104, 2012.
+
+[12] M. Janosov, C. Virágh, G. Vásárhelyi, and T. Vicsek, “Group chasing
+tactics: how to catch a faster prey,” New Journal of Physics, vol. 19,
+no. 5, p. 053003, 2017.
+
+[13] Y. Koren, J. Borenstein, et al., “Potential field methods and their
+inherent limitations for mobile robot navigation.” in Icra, vol. 2, no.
+1991, 1991, pp. 1398–1404.
+
+[14] Z. Mu, J. Pan, Z. Zhou, J. Yu, and L. Cao, “A survey of the pursuit–
+evasion problem in swarm intelligence,” Frontiers of Information
+Technology & Electronic Engineering, vol. 24, no. 8, pp. 1093–1116,
+2023.
+
+[15] J. K. Gupta, M. Egorov, and M. Kochenderfer, “Cooperative multi-agent
+control using deep reinforcement learning,” in Autonomous Agents and
+Multiagent Systems: AAMAS 2017 Workshops, Best Papers, São Paulo,
+Brazil, May 8-12, 2017, Revised Selected Papers 16. Springer, 2017,
+pp. 66–83.
+
+[16] S. F. Desouky and H. M. Schwartz, “Q (λ)-learning adaptive fuzzy
+logic controllers for pursuit–evasion differential games,” International
+Journal of Adaptive Control and Signal Processing, vol. 25, no. 10,
+pp. 910–927, 2011.
+
+[17] M. D. Awheda and H. M. Schwartz, “The residual gradient facl
+algorithm for differential games,” in 2015 IEEE 28th Canadian
+Conference on Electrical and Computer Engineering (CCECE).
+IEEE,
+2015, pp. 1006–1011.
+
+[18] D. Luo, Z. Fan, Z. Yang, and Y. Xu, “Multi-uav cooperative maneuver
+decision-making for pursuit-evasion using improved madrl,” Defence
+Technology, vol. 35, pp. 187–197, 2024.
+
+[19] W. Gan, X. Qu, D. Song, and P. Yao, “Multi-usv cooperative chasing
+strategy based on obstacles assistance and deep reinforcement learning,”
+IEEE Transactions on Automation Science and Engineering, 2023.
+
+[20] Y. Wang, L. Dong, and C. Sun, “Cooperative control for multi-player
+pursuit-evasion games with reinforcement learning,” Neurocomputing,
+vol. 412, pp. 101–114, 2020.

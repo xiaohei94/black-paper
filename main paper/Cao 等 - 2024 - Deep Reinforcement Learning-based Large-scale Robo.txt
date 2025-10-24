@@ -1,0 +1,1199 @@
+Deep Reinforcement Learning-based Large-scale Robot Exploration
+
+Yuhong Cao1, Rui Zhao1, Yizhuo Wang1, Bairan Xiang1, Guillaume Sartoretti1
+
+4
+2
+0
+2
+
+r
+a
+
+M
+6
+1
+
+]
+
+O
+R
+.
+s
+c
+[
+
+1
+v
+3
+3
+8
+0
+1
+.
+3
+0
+4
+2
+:
+v
+i
+X
+r
+a
+
+Abstract— In this work, we propose a deep reinforcement
+learning (DRL) based reactive planner to solve large-scale
+Lidar-based autonomous robot exploration problems in 2D
+action space. Our DRL-based planner allows the agent to reac-
+tively plan its exploration path by making implicit predictions
+about unknown areas, based on a learned estimation of the
+underlying transition model of the environment. To this end,
+our approach relies on learned attention mechanisms for their
+powerful ability to capture long-term dependencies at different
+spatial scales to reason about the robot’s entire belief over
+known areas. Our approach relies on ground truth information
+(i.e., privileged learning) to guide the environment estimation
+during training, as well as on a graph rarefaction algorithm,
+which allows models trained in small-scale environments to
+scale to large-scale ones. Simulation results show that our model
+exhibits better exploration efficiency (12% in path length, 6%
+in makespan) and lower planning time (60%) than the state-of-
+the-art planners in a 130m × 100m benchmark scenario. We
+also validate our learned model on hardware.
+
+I. INTRODUCTION
+
+Autonomous exploration focuses on finding the shortest
+total exploration path to map an unknown environment (i.e.,
+classify it into free and occupied areas). In this work, we
+consider autonomous exploration based on omnidirectional
+3D Lidar with 2D action space (i.e., for a ground robot).
+There, recent developments of Lidar-based simultaneous
+localization and mapping (SLAM) can now near-perfectly
+mitigate state estimation error and yield high-quality maps
+on hundreds-meter scenarios [1]. Leveraging these advanced
+SLAM approaches, current autonomous exploration plan-
+ners [2]–[6] are able to assume the localization and mapping
+are perfect and start tackling complex larger-scale environ-
+ments towards real-life deployments. However, optimizing
+trajectories in large-scale environments is non-trivial, since
+the exploration task requires real-time replanning as the robot
+discovers unknown areas and updates its map, with planning
+horizons in the hundreds of meters.
+
+Advanced large-scale planners often leverage hierarchical
+planning to decrease computational complexity while main-
+taining the fineness of local paths [2]–[4], [6], as a result,
+the state-of-the-art planner, TARE [4], is able to explore
+environments at
+the hundred-meters scale while keeping
+computing times under a second at each planning step.
+Nevertheless, these conventional planners share the same
+limitation: they try to optimize paths solely based on the
+partial belief (map) over the environment. However, even
+long-term paths on the partial map can lead to
+optimal
+suboptimal longer-term behaviors as the map is updated with
+
+1 Author
+
+is with Department of Mechanical Engineering, Col-
+lege of Design and Engineering, National University of Singapore.
+caoyuhong@u.nus.edu
+
+Fig. 1. A mobile ground robot exploring an indoor lab environment
+using our DRL-based planner. Top-left: view from the robot’s onboard
+camera (not used for mapping). Top-right: agent’s current belief (map) of
+the environment, and view of our neural network’s inputs. Bottom: 3D point
+cloud (map) of the environment constructed by the robot. The axes system
+represents the current position and orientation of the robot, the purple ball
+the next waypoint output by our planner,
+
+new measurements that may contradict the current plan. At
+its core, the exploration problem is a partially observable
+Markov decision process (POMDP), where the transition
+model between true states (ground truth of the environment)
+and the robot belief (map) is hard to predict. For example, a
+robot cannot confirm that two close-by, incomplete corridors
+in its partial map are connected before fully exploring this
+portion of the environment. However, we note that humans
+in the same situations will often try to infer the complete
+structure of an environment from a partial map (i.e., guess
+and reconstruct
+that full corridor) to improve efficiency.
+Learning-based approaches such as supervised learning or
+model-based reinforcement learning may be an option to
+explicitly predict unknown areas from the agent’s partial
+map, allowing conventional planners to then plan paths over
+the predicted belief. However, since the underlying transition
+model in autonomous exploration is highly stochastic and
+thus very hard to estimate/learn, directly relying on such a
+learned prediction may not be a wise choice in practice.
+
+We believe that a simple model-free deep reinforcement
+learning (DRL) approach can elegantly handle all
+these
+challenges, by implicitly estimating the transition model and
+learning an adaptive policy. We build upon recent attention-
+based policy neural network [7], [8], which have shown
+outstanding abilities at allowing the agent to reason about
+its entire belief at multiple spatial scales. In this work, we
+further propose to train an attention-based policy with the as-
+
+
+
+
+
+
+
+
+sistance of ground truth knowledge (i.e., privileged learning).
+It enables the model to draw out more potential of attention
+mechanism at implicitly predicting unknown areas from the
+partial robot belief, leading to a more stable training process
+and better performance after training. In particular, we train
+our model under the soft actor-critic (SAC) algorithm [9],
+[10], and let the critic network have access to the ground
+truth of the environment to get precise long-term evaluations.
+We further propose a graph rarefaction algorithm, which
+enhances the model’s capacity to capture longer-term tem-
+poral dependencies between areas, thus extending the use of
+trained policy from small- to large-scale environments. We
+compare our DRL-based planner with conventional planners
+in simplified small-scale environments, where it achieves
+11% better exploration efficiency in terms of path length.
+We then test our planner in a high-fidelity 3D Gazebo
+simulation benchmark of a 130m × 100m indoor office,
+where it achieves better exploration efficiency (12% in path
+length, 6% in makespan) and significantly lower computing
+times (60%) compared to the state-of-the-art exploration
+planner: TARE [4], [6]. Finally, we experimentally validate
+our planner on a ground robot in an 80m × 10m indoor sce-
+nario involving cluttered furniture, highlighting its real-life
+applicability without any additional training (demonstrated
+in Figure 1). To the best of our knowledge, our work is the
+first DRL planner that can effectively explore such large-
+scale environments.
+
+II. RELATED WORKS
+
+In this work, we focus on methods applicable to the
+problem setup where the information in the robot belief is
+evaluated through frontiers (i.e., boundary between known,
+free area and unknown area). There are another group
+of other methods based on the problem setup where the
+information is evaluated through information theory (e.g.,
+mutual information) [11]–[13]. However, information theory-
+based methods require the robot belief to be a probabilistic
+occupancy map, making them not applicable in the setup of
+this work and related works discussed below.
+Small-scale exploration planner Frontier-based exploration
+planners have been shown to be very efficient in small-scale
+environments. Yamauchi et al. [14] first proposed to utilize
+frontiers to drive exploration, where the cost (i.e., the path
+length from the current position to a frontier) is usually
+used to rank frontiers, with the lowest-costed frontier being
+chosen as the next one to be visited by the robot. More recent
+works [15], [16] further considered utility (i.e., the size of
+a frontier, quantifying the amount of information expected
+to be collected at that frontier) to improve exploration effi-
+ciency. Although the resulting paths are often short-sighted
+(i.e., optimize for shorter-term objectives, often at the cost
+of longer-term exploration ones), the above planners remain
+near-optimal in simple scenarios, where the number of fron-
+tiers is relatively low. In general, as the number of frontiers
+increases in larger and more cluttered environments, frontier-
+based planners suffer from such myopic decisions. Instead
+of evaluating a single frontier, [17] relied on a sampling-
+
+based strategy in a receding-horizon manner to optimize a
+long-term trajectory, thus achieving non-myopic decisions
+and significantly outperforming frontier-based planners in
+relatively complex (but still small-scale) environments while
+remaining executable in real-time.
+Large-scale exploration planner Optimizing long-term tra-
+jectories online in large-scale exploration problems is chal-
+lenging since trajectories might be over 100m in length,
+while the gap between individual waypoints should remain
+below 1m to allow for fine detail mapping. Some advanced
+sampling strategies have been proposed to tackle larger-scale
+exploration [18], [19]. Selin et al. [2] found that, in large-
+scale environments, frontiers are sparse at the global scale
+but dense at the local level, and proposed a hierarchical
+framework that combined a global frontier-based planner
+and a local planner based on [17]. Following works [3],
+[4], [6], [20] drew on the experience of such hierarchical
+frameworks to perform path planning at multiple resolutions
+and further improve the exploration efficiency of planned
+paths, which significantly outperformed naive frontier- and
+sampling-based planners [3], [4], [6]. Notably, Cao et al. [4],
+[6] proposed to use a TSP-based global planner and a
+sampling-based local planner with a coverage constraint
+to trade off the planning fineness of nearby and distant
+areas, which currently exhibits state-of-the-art performance
+with 80% better exploration efficiency over other benchmark
+planners [3], [17], [21].
+DRL-based exploration planner While some works [22],
+[23] have relied on deep learning to explicitly predict the
+layout of the unknown (but only structured indoor) environ-
+ments to assist conventional approaches, most learning-based
+approaches leverage deep reinforcement learning (DRL) to
+directly and reactively make decisions on movements. DRL-
+based planners are expected to achieve long-term exploration
+objectives by training a policy to maximize long-term re-
+turns. Most current DRL-based exploration planners [24]–
+[27] rely on convolutional neural networks (CNNs) to select
+a waypoint from a set of locations, based on a visual rep-
+resentation of the agent’s belief (e.g., map). Although DRL
+intuitively looks like a well-suited method for autonomous
+exploration, the performance of these DRL-based planners is
+only on par with naive frontier-based planners in small-scale
+environments. On the other hand, Chen et al. [28] proposed
+to utilize graph neural network to handle the localization
+error during exploration, however their approach can only
+work in environments without obstacles. Notably, relying
+on learned attention over a graph representation of the
+agent’s belief, our previous work ARiADNE [8] achieved
+remarkable improvements over frontier-based planners and
+one of these CNN-based DRL planners [25]. However,
+ARiADNE’s advantage over TARE is marginal, and like
+other previous DRL methods, this DRL planner cannot scale
+to large environments.
+
+III. PROBLEM STATEMENT
+
+Let E be a bounded environment, classified into free
+areas Ef and occupied areas Eo, where Ef ∪ Eo = E
+
+
+Fig. 2. Our proposed DRL-based planner. The robot first transforms its current map (point cloud) data to an occupancy grid, and then extracts and
+rarefies an informative graph from it. After that, this graph (node features and an adjacency edge mask) is fed to our attention-based network (consisting
+of an encoder and a decoder), which finally outputs a policy over which neighboring node should be the next waypoint.
+
+and Ef ∩ Eo = ∅. The robot maintains a map M (i.e.,
+robot belief) about E, which is classified into free areas
+Mf , occupied areas Mo, and unknown areas Mu, where
+Mf ∪ Mo ∪ Mu = M. Starting from an empty belief
+over the environment (i.e., M = Mu), the robot executes
+an exploration path ψ and updates its map/belief about the
+environment using measurements taken along the path from
+an onboard sensor (here, a LiDAR). The exploration task
+1, and the
+completes when Mo is closed with respect to Mf
+objective is to minimize the cost C(ψ) (e.g., the path length
+L(ψ) or makespan T (ψ)) of the exploration path.
+
+Considering the completed exploration path as a finite
+sequence of robot-visited positions ψ = [p1, p2, ..., pn],
+where pi ∈ Ef is the robot position at decision step i,
+the exploration problem is a partially observable Markov
+decision process (POMDP). This problem can be formulated
+as a tuple (S, A, T, R, Ω, O), where S is a set of states, A is a
+set of actions, T is a set of conditional probabilities between
+states, R is a set of reward, Ω is a set of observations,
+O is a set of conditional probabilities between states and
+observations The true state si = (Ei, Mi, ψ1:i), si ∈ S is
+not available to the agent during exploration; instead, the
+robot only has access to observation (i.e., its map/belief)
+oi = (Mi, ψ1:i), oi ∈ Ω, depending on O(oi|si). At each
+decision step, the robot selects and takes action ai ∼ π(·|oi),
+which indicates the next waypoint to visit. Upon reaching
+that next state si+1 with T (si+1|si, ai), the agent receives a
+reward ri = −C(ψt−1:t). The objective is to find an optimal
+policy π∗, which selects an action at each decision step that
+maximizes the long-term discounted return E(Σn
+
+t=irt).
+
+IV. METHODOLOGY
+
+Solving a highly stochastic POMDP such as autonomous
+exploration is non-trivial, and thus we propose to rely on
+model-free DRL for its powerful ability to make implicit
+predictions based on past experiences. In this work, we
+rely on an attention-based neural network similar to [7],
+[8] for its proven ability to model multi-scale dependencies
+between areas. We further improve the model’s performance
+
+1In practice, the map is often considered complete when all frontiers have
+
+been removed, which also ensures the set of occupied areas is closed.
+
+by allowing the critic to train based on ground truth informa-
+tion, to help it precisely estimate returns and the underlying
+transition model. Guided by these improved predictions, our
+policy network can finally improve its ability to achieve long-
+term efficiency under partial observations.
+
+We first decrease the complexity of the problem by ex-
+tracting a dense collision-free graph from the map. With
+this collision-free graph as input, we train an attention-based
+policy network offline, using the soft actor-critic (SAC) with
+discrete actions [9], [10]. Note that under the actor-critic
+framework, the critic network is only used during training to
+assist the policy network in estimating the state-action value.
+Therefore, we allow the critic network to access true states
+s, instead of partial observations o, to estimate the long-term
+impact of current actions more precisely, which in turn leads
+to improved overall performances. Moreover, benefiting from
+the nature of attention layers [29], [30], our policy network
+is able to generalize to arbitrary graphs and arbitrary scale
+environments. We further propose an algorithm to rarefy the
+dense collision-free graph, allowing our DRL-based planner
+to naturally scale to larger-scale environments without any
+additional training.
+
+A. Sequential Decision-making on a Graph
+
+Consider the collision-free graph G = (V, E) extracted
+from the map M, where V = (v1, v2, .., vm), ∀vi =
+(xi, yi) ∈ Mf
+is a set of nodes (one of the nodes
+the robot current position pt) and E =
+is located at
+((v1, v2), ..., (vm−1, vm)) is a set of collision-free edges. In
+this work, nodes in V uniformly cover free areas Mf . We
+find the k nearest neighbors of each node and check for
+collisions to construct the set of admissible edges E (i.e.,
+edges between nodes that do not cross Mo or Mu). Dur-
+ing exploration, this collision graph extends incrementally
+along with the update of free areas. Our DRL planner only
+makes decisions on which neighboring node will be the next
+waypoint (i.e, π(ai|ot) = p(vi|ot), (pt, vi) ∈ E), toward
+which the robot then navigates. Note that, during training, the
+planner only makes decisions upon arriving at the previously
+selected waypoint, while at execution time, the planner can
+make decisions at a fixed frequency to be more reactive to
+map updates.
+
+
+B. Policy Network
+
+We first extract an informative graph G∗, extending the
+collision graph G, as the input of our policy network to
+allow for more efficient
+learning. The informative graph
+G∗ = (V ∗, E) shares the same collision-free edge set as
+i = (vi, ui, gi) ∈ V ∗ has two more
+G, and each node v∗
+properties than nodes in V : 1) the node’s utility (denoted
+as ui, quantifying observable frontiers within line of sight
+from location vi) and 2) the guidepost (denoted as gi, a
+binary value defining whether vi has already been visited
+previously). The utility extracts information from the map to
+avoid the need for unnecessary learning of low-level pattern
+recognition, allowing the network to focus on modeling long-
+term dependencies between areas. The guidepost represent-
+ing the path ψ1:t executed so far, which we empirically found
+to help speed up training by encouraging the robot to select
+unvisited nodes. The informative graph is normalized and
+used as input of our policy network, composed of an encoder
+and a decoder, as shown in Figure 2, where the encoder learns
+to model the dependencies among nodes V ∗ and the decoder
+uses these dependencies to finally output the policy π over
+neighboring nodes.
+Encoder A graph structure is naturally aligned with the input
+format of an attention layer:
+
+qi = W Qhq
+
+i , ki = W Khk,v
+
+i
+
+(cid:40)
+
+wij =
+
+(cid:80)n
+
+euij
+j=1 euij , Mij = 0
+Mij = 1
+
+0,
+
+, vi = W V hk,v
+
+i
+
+, uij =
+
+qT
+· kj√
+i
+d
+
+,
+
+n
+(cid:88)
+
+, h′
+
+i =
+
+wijvj, 1 ≤ i ≤ m
+
+j=1
+
+(1)
+where each hi ∈ Rd×1 is a d-dimension feature vector pro-
+jected from node v∗
+i , superscripts q and k, v denote the source
+of the query, key, and value respectively, W Q, W K, W V ∈
+Rd×d are learnable matrices, and M , which serves as an edge
+mask, is a m×m adjacency matrix built from E (Mij = 0, if
+(i, j) ∈ E, else Mij = 1). Note that in each attention layer,
+each node in the informative graph is only allowed to access
+the features of its neighboring nodes. To allow the model
+to learn dependencies between non-neighboring nodes, we
+stack six attention layers in the encoder, each taking the
+output of its previous attention layer as input. The output of
+the encoder is a group of node features, each h′
+i modeling
+dependencies between node v∗
+Decoder Denoting the node feature corresponding to the
+robot’s current position pt as hc, we first add a feature vector
+representing the global graph to it, by passing hc as the query
+source and all node features h′
+i as the key and value source
+to an attention layer, concatenating its output with hc and
+projecting its back to a d-dimension feature h∗c. We then
+select its neighboring node features hn
+i , ∀(pt, vi) ∈ E and
+input them as the key source and h∗c as the query source to
+a pointer layer [7], [8], [31], which directly outputs attention
+weights w as the policy π(ai|ot) = p(vi|ot), (pt, vi) ∈ E.
+By using this pointer network at the end of the decoder,
+the final policy’s dimensions naturally match the number of
+neighboring nodes.
+
+i and all other nodes.
+
+Informative graph (left) and Ground-truth graph (right). The
+Fig. 3.
+informative graph is the input of our policy network. The ground truth graph
+is the input of our critic network, which is only used during training to assist
+the learning of the policy. Nodes are color-coded based on their utility (dark
+purple to yellow, low to high). The blue trajectory is the path executed so
+far by the robot (light purple node).
+
+C. Training with Ground Truth
+
+SAC We train our attention-based policy network using the
+soft actor-critic (SAC) algorithm with discrete actions [9],
+in the set of small-scale exploration environments
+[10],
+provided by [25]. The goal of SAC is to balance the trade-off
+between maximizing returns and policy entropy:
+
+π∗ = argmax E[
+
+T
+(cid:88)
+
+t=0
+
+γt(rt + αH(π(.|ot)))],
+
+(2)
+
+where H denotes the entropy and α is a temperature
+parameter that tunes the importance of the entropy term
+versus the return. We use reward shaping to help tune the
+training: for each action at, in addition to the cost reward
+rc = −C(ψt−1:t), we give an exploration reward re that
+quantifies the number of observed frontiers associated with
+at. Upon finishing exploration (i.e., once the utility of all
+nodes is zero), we also give the agent a fixed finishing reward
+rf . Thus the reward used for training is ri = a·rc +b·re +rf ,
+where a and b are scaling parameters (in practice a = 1/64,
+b = 1/50, rf = 20). SAC trains a critic network ϕ to estimate
+the soft action-state values Qϕ(ot, ai), using the critic loss:
+JQ(ϕ) = Eot [ 1
+2 (Qϕ(ot, at) − (rt + γEot+1[V (ot+1)]))2],
+where V (ot) = Eai[Q(ot, ai)] − αlog(π(·|ot)). The policy
+network θ is trained to output a policy that maximizes the
+expected state-action value, where the policy loss reads:
+Jπ(θ) = E(ot,ai)[αlog(πθ(ai|ot)) − Qϕ(ot, ai)]. The temper-
+ature parameter is auto-tuned during training and the temper-
+ature loss is calculated as: J(α) = Eat[−α(logπt(at|ot) +
+H)], where H denotes the target entropy [9], [10].
+Critic Network The training of a model-free DRL agent
+on a POMDP involves the need to estimate state/state-action
+values from partial observations of the environment, where
+the model needs to implicitly learn to predict the transition
+model T and O, which is non-trivial in a stochastic problem
+such as autonomous exploration. In SAC, the learning of
+the policy network depends on accurate state-action value
+estimations from the critic network, where such coupling
+might further hamper the learning of optimal policies (e.g.,
+from oscillations in thye critic’s training from high-variance
+gradients). In this context, recent works [8] tried to use
+standard SAC (i.e., identical observation inputs and nearly
+
+
+TABLE I
+COMPARISONS WITH BASELINE PLANNERS IN SMALL-SCALE ENVIRONMENTS (IDENTICAL 100 SCENARIOS FOR EACH METHOD).
+
+Nearest
+
+Utility
+
+NBVP
+
+TARE Local
+
+CNN
+
+ARiANDE
+
+Ours
+
+Distance (pixel)
+
+1354(±410)
+
+1268(±396)
+
+1323(±371)
+
+1266(±388)
+
+1323(±428)
+
+1204(±378)
+
+1118(±321)
+
+the same network structure for both actor and critic with
+just a different final layer to differentiate their output) but
+found that the critic network remained rather noisy due to the
+high randomness of the underlying transition model (shown
+as the gradient variance). During training, the critic loss
+remains high (∼ 10% of Q(ot, at)), showing that the critic
+is struggling at learning the underlying long-term effects of
+actions/states, and thus providing less accurate estimations
+to train the actor.
+
+To address this issue, in this work, we leverage the struc-
+ture of the actor-critic framework, where the critic network is
+only used to assist policy network training and is not required
+after being trained, allowing us to take true states as the
+observations for the critic network (i.e., privileged learning).
+Figure 3 shows a visual comparison between the inputs of
+the policy network and the critic network. Specifically, we
+keep the structure of the vanilla critic network but construct
+a ground truth graph G′ = (V ′, E′), from st and ot. G′ is
+similar to the informative graph used as input of the policy
+network, but the node set V ′ covers the whole (ground truth)
+free area in E, the property of each node v′
+i = (xi, yi, ui, ei)
+is slightly different: the unexplored feature ei is a binary
+value indicating whether v′
+i is in the already explored area
+by the robot. If a node v′
+i lies in unexplored areas, we set its
+utility ui = −1. By doing so, the critic network now only
+needs to tackle a more traditional MDP problem, i.e., esti-
+mating paths to cover an environment with fully known prior,
+allowing for more accurate estimations of state-action values
+(around 10 times lower state-action value loss and gradient
+variance). In practice, this translates into ∼ 10% increased
+average per-step rewards compared to standard SAC (more
+details can be found in the supplemental material).
+
+Training details Our model
+is trained on the dungeon
+environments provided by [25], where each environment E
+is a 640 × 480 grid world. The sensor range of our robot
+is set to 80 cells. We uniformly place 30 × 30 points in the
+environment and select all points in the explored free area
+Mf to form the node set V and construct the information
+graph G∗ = (V ∗, E∗), where the number of neighboring
+nodes k = 20. The exploration task is completed once
+there is no non-zero utility node in V ∗ (using a threshold
+to ignore nodes with ui ≤ 5 in practice). During training,
+we set the max episode length to 128 decision steps, the
+discount factor to γ = 1, the batch size to 64, and the
+episode buffer size to 2500. Training starts after the episode
+buffer collects more than 1000 step data. The target entropy
+is set
+the end of
+each episode, and is composed of 8 iterations. We use the
+Adam optimizer with a learning rate of 10−5 for both policy
+and critic networks and 10−4 for the temperature auto-
+
+to 0.01 · log(k). Training happens at
+
+tuning. The target critic network updates every 64 training
+step. Our model is trained on a desktop equipped with an
+AMD Ryzen7 5700X CPU and an NVIDIA GeForce RTX
+4080 GPU. We train our model utilizing Ray, a distributed
+framework for machine learning [32], and run 16 training
+environments simultaneously to accelerate data collection.
+The training needs approximately 3 days to fully converge.
+Our full code can be found at https://github.com/
+marmotlab/large-scale-DRL-exploration.
+
+D. Graph Rarefaction for Large-scale Exploration
+
+Although our policy network is trained in small-scale
+environments only, our networks can naturally handle ar-
+bitrary graphs. However, the number of nodes needed to
+let G∗ uniformly cover larger-scale environments will be
+significantly higher, even though while the graph structure
+would be dense, information would remain sparse (i.e., many
+frontiers are very far from each other, and separated by
+a large number of 0-utility nodes). To extend the use of
+our trained model to larger-scale environments, we propose
+a method to rarefy our informative graph, which lets the
+model capture longer-term dependencies more efficiently
+(i.e., frontiers far away can connect with each other through
+fewer edges). In short, we first classify all nodes with
+non-zero utility into multi groups according to neighboring
+relationship, and then find the shortest paths on G from the
+robot’s position to each group through A* and check for line
+of sight at each waypoint in these paths, to find a minimal set
+of nodes V s ⊂ V ∗ that represents all information in the map
+(the pseudo-code can be found in the supplemental material).
+The result is a sparser information graph Gs = (V s, Es),
+which is used as the policy network’s input.
+
+V. EXPERIMENT
+
+A. Validation in Small-scale Environments
+
+We first test our trained model on a benchmark set of
+100 small-scale simplified simulation environments (never
+seen during training). We compare our planner with baseline
+planners including (1) nearest: the robot always moves to the
+nearest frontier, (2) utility: the robot moves to the frontier
+which balances cost and utility, (3) NBVP: a sampling-based
+planner based on rapid random trees [17], and (4) TARE
+Local: the local level planner of TARE [4], [6]. (5) CNN:
+a DRL planner based on CNNs [25]. (6) ARiADNE: an
+ablation variant of our model trained without ground truth
+as in [8]).
+In our
+
+tests, we consider exploring more than 99%
+(meaning minor error is tolerable) of the free area in the
+environment as completing the exploration. As shown in
+Table I, our DRL planner outperforms all baseline planners
+
+
+(a) DSVP, distance 1351m, time 796s
+
+(b) TARE, distance 1177m, time 644s
+
+(c) Ours, distance 985m, time 582s
+
+Fig. 4.
+
+Exploration paths comparisons in a large-scale 130m × 100m indoor office simulation.
+
+TABLE II
+COMPARISONS WITH BASELINE PLANNERS IN THE LARGE-SCALE
+
+INDOOR BENCHMARK [6] (10 RUNS EACH).
+
+DSVP
+
+TARE
+
+Ours
+
+Human
+
+Distance (m)
+Time (s)
+Computing (s)
+Efficiency (m3/m)
+Efficiency (m3/s)
+
+1462
+870
+0.90
+3.91
+6.57
+
+1158
+634
+0.24
+4.82
+8.81
+
+1020
+590
+0.15
+5.42
+9.36
+
+879
+520
+/
+6.27
+10.60
+
+TABLE III
+COMPARISONS WITH BASELINE PLANNERS IN THE LARGE-SCALE
+OUTDOOR BENCHMARK [6] (5 RUNS EACH).
+
+DSVP
+
+TARE
+
+Ours
+
+Human
+
+Distance (m)
+Time (s)
+Computing (s)
+Efficiency (m3/m)
+Efficiency (m3/s)
+
+2002
+1053
+1.31
+21.13
+40.17
+
+1347
+707
+0.70
+29.37
+55.96
+
+1174
+686
+0.44
+32.63
+55.85
+
+1071
+549
+/
+36.05
+70.33
+
+simulation considers real-world sensor model (a Velodyne
+16-line 3D LiDAR) and real robot constraint (a four-wheel
+differential drive robot with max speed 2m/s). Note that the
+model used for our large-scale tests is the same as the one
+for our small-scale tests, but using our graph rarefaction al-
+gorithm. We use Octomap [33] to classify free and occupied
+areas (i.e., define ”explored” area). We set the resolution of
+Octomap to 0.4m, the max map update range to 20m, the
+gap of nodes to 2m, the number of neighboring nodes in the
+dense collision-free graph to 5, the number of neighboring
+nodes in the sparse information graph to 10, the sparse radius
+to 12m, and replan the robot’s path every 0.8s. Although we
+construct a 3D Octomap, the planner only considers frontiers
+at the ground level (i.e., planning is based on a 2D belief).
+All computations are conducted on a Intel i7-1270p CPU.
+
+We compare our
+
+large-exploration planner with:
+
+(1)
+TARE [4], [6] (also the provider of this test environment),
+the state-of-the-art large-scale exploration planner which in
+general produces 80% increased exploration efficiency over
+benchmark planners such as [3], [17]; in TARE, a global
+planner is designed to find a global TSP path to visit all
+unexplored areas, and the start of the global path is taken
+as the destination for the local path planner discussed in
+the last subsection, (2) DSVP [34], which uses a rapid
+random tree-based local planner and a graph-based global
+
+(a) TARE, 1505m, 803s
+
+(b) Ours, 1104m, 659s
+
+Fig. 5. Exploration paths comparisons in a large-scale 150m × 150m
+outdoor forest simulation.
+
+(11% better than TARE Local and Utility, 15% better than
+CNN and NBVP) in terms of average travel distance to
+complete the exploration. We first note that
+the vanilla
+model trained without ground truth already achieves shorter
+exploration paths than all other baseline planners, showing
+the efficiency of our attention-based policy network to reason
+about dependencies of areas at multiple scales and thus
+making decisions that balance exploration and refining the
+trained with ground
+map. We then note that our model
+truth further improves over this vanilla ARiADNE model
+(7% better), verifying that training the critic network with
+ground truth can assist the policy network to estimate the
+transition model and long-term returns more precisely. Our
+results suggest that our planner can effectively predict the
+structure of unexplored areas, to make further non-myopic
+decisions and avoid redundant movements, by relying on past
+experiences in similarly structured indoor environments seen
+at training. We visualize attention weights of our attention
+layer to observe the insight learned mechanism (see our
+supplemental material), and we find that in some heads the
+planner focuses its attention over areas where connections
+might be missing, implying that the planner is predicting the
+structure of unknown areas from the belief of known areas.
+
+B. Validation in Large-scale Environments
+
+We then test our large-scale exploration planner in a
+Gazebo simulation of a 130m × 100m office with cluttered
+obstacles provided by [6]. Compared to our small-scale test
+environments where the sensor model and robot kinetic are
+highly simplified, in this large-scale test environment, the
+
+
+Fig. 6.
+to complete exploration.
+
+Comparisons with baseline planners in the large-scale indoor benchmark [6] (10 runs each), including ARiADNE despite its inability
+
+(a) Turtlebot3
+
+(b) Teaching room
+
+(c) Final Octomap
+
+(d) Office room
+
+(e) Another office room
+
+(f) Final point cloud map
+
+Fig. 7. Real world experiment in a 80m × 10m laboratory with cluttered furniture and moving pedestrians.
+
+planner, (3) Best human practice with full prior knowledge
+about the environment provided by [6] as the reference for
+optimal exploration path. The hyperparameters of TARE
+and DSVP were tuned by the original authors directly on
+benchmark environments. Note that TARE further considers
+3D frontiers but still does path planning in 2D action space.
+We evaluate the performance of all planners from multiple
+metrics: (1) Distance: total exploration path length, (2) Time:
+total duration of the exploration task, (3) Computing: per-step
+planning time, and (4) Efficiency: explored volume divided
+by the travel distance or makespan. Results are shown in
+Table II, Figure 4, and Figure 6.
+
+We note that our DRL-based planner outperforms TARE
+in terms of exploration efficiency (12% in terms of distance
+efficiency and 6% in terms of time efficiency) and algorithm
+informative
+computing time (including frontier detection,
+graph update, and network inference time, 60% faster even
+though our planner is implemented in Python and TARE in
+C++). As shown in Figure 4, the exploration path planned
+by our DRL planner exhibits fewer redundant movements
+than benchmark planners. Although TARE theoretically guar-
+antees near-optimal paths to cover frontiers in its current
+belief, we believe the advanced performance of our DRL
+planners shows the key importance of predicting the potential
+structure of unknown areas, which can yield decisions that
+benefit
+longer-term exploration. Note that paths planned
+by TARE allow the robot to move at the fastest speed,
+as TARE explicitly considers the motion constraint of the
+robot. Therefore, our advantage in terms of time efficiency
+is smaller than on distance efficiency.
+
+Although our model was trained in indoor environments,
+we also test it in a 150m × 150m cluttered outdoor forest
+
+Gazebo environment without further training (results are
+shown in Table III and Figure 5). In this outdoor environ-
+ment, the structure learned by our model (e.g., junctions and
+corridors) in indoor environments does not exist anymore,
+and we expect our planner not to be able to perform implicit
+predictions as well as in indoor environments. As expected,
+we observe our planner sometimes randomly chooses way-
+points, implying that it cannot decide which action is optimal.
+However, in this cluttered outdoor environment, our DRL
+planner still achieves time efficiency on par with TARE and
+better distance efficiency.
+C. Validation in Real World
+
+We finally validate our large-scale planner in the real
+world, using a wheeled robot equipped with a 3D LiDAR
+to explore an 80m × 10m indoor laboratory with cluttered
+furniture and moving pedestrians (see Figure 7). The robot
+platform is a customized four-wheel Turtlebot3 with a max
+speed of 0.2m/s. We use a Leishen C16 LiDAR with
+LOAM [1] to both get LiDAR odometry and mapping. For
+our DRL planner, compared to the parameters used in simu-
+lation, we set the resolution of Octomap to 0.2m, and the gap
+of nodes to 0.8m to better handle such a cluttered real-world
+indoor environment. We believe the robot successfully and
+efficiently explores the lab in 12 minutes, highlighting the
+robust applicability of our planner in the real world. It should
+be noted that most previous DRL-based planners [24]–[28]
+are not validated on hardware in such a cluttered and large-
+scale environment. Compared to these planners that directly
+take the map as network input, where images from the real
+world may be very noisy and different from those used
+during training, we believe that extracting an informative
+graph helps the learned model avoid failure on never-seen
+
+
+real-world scenarios.
+
+VI. CONCLUSION
+
+In this work, we propose a DRL-based exploration frame-
+work, which relies on ground truth information to assist
+the training of an attention-based policy network. We show
+that our trained model can more precisely estimate the
+unexplored areas, which helps the planner better reason about
+its map/belief and make decisions that benefit long-term
+objectives. With a graph-rarefaction algorithm, our planner
+becomes the first DRL-based method applicable to large
+environments and significantly outperforms state-of-the-art
+conventional planners in a benchmark indoor simulation
+environment. We also validate our planner in the real world,
+highlighting its potential for real-life deployments on robot.
+Future works will focus on extending our planner from
+single to multi-robot exploration, where the planner needs
+to further help robots achieve efficient cooperation. We are
+also interested in letting the robot take account of the robot’s
+motion constraint in training.
+
+VII. ACKNOWLEDGEMENT
+
+This work was
+
+supported by Temasek Laboratories
+(TL@NUS) under grant TL/FS/2022/01 and the Singapore
+Ministry of Education Academic Research Fund Tier 1.
+
+APPENDIX
+
+Fig. 8. Ablation results, with and without ground truth when training
+the critic network. By simplifying the POMDP to a MDP, our privileged
+learning approach reduces the state-action value loss and gradient variance
+by 10 times over the original critic network.
+
+REFERENCES
+
+[1] J. Zhang and S. Singh, “Loam: Lidar odometry and mapping in real-
+time,” in Robotics: Science and Systems, vol. 2, no. 9. Berkeley, CA,
+2014, pp. 1–9.
+
+[2] M. Selin, M. Tiger, D. Duberg, F. Heintz, and P. Jensfelt, “Efficient
+autonomous exploration planning of large-scale 3-d environments,”
+IEEE Robotics and Automation Letters, vol. 4, no. 2, pp. 1699–1706,
+2019.
+
+Fig. 9. Visualization of the learned attention weights from the three
+main heads of our decoder in a small-scale scenario. The query source
+is the node feature corresponding to the current position (purple). Key
+and value sources are all nodes in the graph (blue), and their radius is
+proportional to their learned attention weight. Note how the first and second
+heads adapt their attention when they notice that two corridors (top right)
+might connect.
+
+Algorithm 1: Dense Graph Rarefaction Algorithm
+Input: node set V ∗, map M, robot pos. pt, radius
+
+Dth
+
+Output: sparse information graph Gs = (V s, Es)
+Get non-zero utility node set U from V ∗
+Initialize node set V s ← U , covered node set U ← ∅
+for v ∈ U do
+
+if v ∈ U then continue;
+Find nearby node set N in Dth
+for v′ ∈ N do
+
+if line (v, v′) is collision free then U ← v′;
+
+end
+Find path ζ from pt to v∗, set ref node vref = v
+for i ∈ |ζ| do
+
+if line (vref , ζi) is not collision free or
+L(vref , ζi) ≥ Dth then
+
+vref = ζi−1, V s ← vref
+
+end
+
+end
+Get collision free edge set Es based on V s and M
+
+[3] T. Dang, M. Tranzatto, S. Khattak, F. Mascarich, K. Alexis, and
+M. Hutter, “Graph-based subterranean exploration path planning using
+aerial and legged robots,” Journal of Field Robotics, vol. 37, no. 8,
+pp. 1363–1388, 2020.
+
+[4] C. Cao, H. Zhu, H. Choset, and J. Zhang, “Tare: A hierarchical
+framework for efficiently exploring complex 3d environments,” in
+Robotics: Science and Systems, 2021.
+
+[5] F. Yang, D.-H. Lee, J. Keller, and S. Scherer, “Graph-based topological
+exploration planning in large-scale 3d environments,” in 2021 IEEE
+International Conference on Robotics and Automation (ICRA).
+IEEE,
+2021, pp. 12 730–12 736.
+
+[6] C. Cao, H. Zhu, Z. Ren, H. Choset, and J. Zhang, “Representation
+granularity enables time-efficient autonomous exploration in large,
+complex worlds,” Science Robotics, vol. 8, no. 80, p. eadf0970, 2023.
+[7] Y. Cao, Y. Wang, A. Vashisth, H. Fan, and G. A. Sartoretti, “Catnipp:
+Context-aware attention-based network for informative path planning,”
+in Conference on Robot Learning. PMLR, 2023, pp. 1928–1937.
+[8] Y. Cao, T. Hou, Y. Wang, X. Yi, and G. Sartoretti, “Ariadne: A
+reinforcement learning approach using attention-based deep networks
+for exploration,” in 2023 IEEE International Conference on Robotics
+and Automation (ICRA), 2023, pp. 10 219–10 225.
+
+0.00.51.01.5Step1e50.20.30.4Reward01Step1e551015Value01Step1e502Value Loss01Step1e50200Value Gradient01Step1e515105Policy Loss01Step1e5123Policy GradientVanillaGround truth
+graphs,” in 2020 IEEE/RSJ International Conference on Intelligent
+Robots and Systems (IROS).
+
+IEEE, 2020, pp. 6140–6147.
+
+[29] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N.
+Gomez, Ł. Kaiser, and I. Polosukhin, “Attention is all you need,”
+Advances in neural information processing systems, vol. 30, 2017.
+
+[30] O. Vinyals, M. Fortunato, and N. Jaitly, “Pointer networks,” Advances
+
+in neural information processing systems, vol. 28, 2015.
+
+[31] Y. Cao, Z. Sun, and G. Sartoretti, “Dan: Decentralized attention-
+based neural network for the minmax multiple traveling salesman
+problem,” in International Symposium on Distributed Autonomous
+Robotic Systems. Springer, 2022, pp. 202–215.
+
+[32] P. Moritz, R. Nishihara, S. Wang, A. Tumanov, R. Liaw, E. Liang,
+M. Elibol, Z. Yang, W. Paul, M. I. Jordan, et al., “Ray: A distributed
+framework for emerging ai applications,” in Proceedings of OSDI,
+2018, pp. 561–577.
+
+[33] A. Hornung, K. M. Wurm, M. Bennewitz, C. Stachniss, and W. Bur-
+gard, “Octomap: An efficient probabilistic 3d mapping framework
+based on octrees,” Autonomous robots, vol. 34, pp. 189–206, 2013.
+
+[34] H. Zhu, C. Cao, Y. Xia, S. Scherer, J. Zhang, and W. Wang,
+“Dsvp: Dual-stage viewpoint planner for rapid exploration by dynamic
+expansion,” in 2021 IEEE/RSJ International Conference on Intelligent
+Robots and Systems (IROS).
+
+IEEE, 2021, pp. 7623–7630.
+
+[9] T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine, “Soft actor-critic: Off-
+policy maximum entropy deep reinforcement learning with a stochastic
+actor,” in International conference on machine learning.
+PMLR,
+2018, pp. 1861–1870.
+
+[10] P. Christodoulou, “Soft actor-critic for discrete action settings,” arXiv
+
+preprint arXiv:1910.07207, 2019.
+
+[11] Z. Zhang, T. Henderson, S. Karaman, and V. Sze, “Fsmi: Fast
+computation of shannon mutual information for information-theoretic
+mapping,” The International Journal of Robotics Research, vol. 39,
+no. 9, pp. 1155–1177, 2020.
+
+[12] A. Asgharivaskasi, S. Koga, and N. Atanasov, “Active mapping via
+gradient ascent optimization of shannon mutual
+information over
+continuous se (3) trajectories,” in 2022 IEEE/RSJ International Con-
+ference on Intelligent Robots and Systems (IROS).
+IEEE, 2022, pp.
+12 994–13 001.
+
+[13] A. Asgharivaskasi and N. Atanasov, “Semantic octree mapping and
+shannon mutual information computation for robot exploration,” IEEE
+Transactions on Robotics, vol. 39, no. 3, pp. 1910–1928, 2023.
+[14] B. Yamauchi, “A frontier-based approach for autonomous exploration,”
+in Proceedings 1997 IEEE International Symposium on Computational
+Intelligence in Robotics and Automation CIRA’97.’Towards New Com-
+putational Principles for Robotics and Automation’.
+IEEE, 1997, pp.
+146–151.
+
+[15] D. Holz, N. Basilico, F. Amigoni, and S. Behnke, “Evaluating the
+efficiency of frontier-based exploration strategies,” in ISR 2010 (41st
+International Symposium on Robotics) and ROBOTIK 2010 (6th Ger-
+man Conference on Robotics). VDE, 2010, pp. 1–8.
+
+[16] M. Kulich, J. Faigl, and L. Pˇreuˇcil, “On distance utility in the
+exploration task,” in 2011 IEEE International Conference on Robotics
+and Automation.
+
+IEEE, 2011, pp. 4455–4460.
+
+[17] A. Bircher, M. Kamel, K. Alexis, H. Oleynikova, and R. Siegwart,
+“Receding horizon” next-best-view” planner for 3d exploration,” in
+2016 IEEE international conference on robotics and automation
+(ICRA).
+
+IEEE, 2016, pp. 1462–1468.
+
+[18] D. Duberg and P. Jensfelt, “Ufoexplorer: Fast and scalable sampling-
+based exploration with a graph-based planning structure,” IEEE
+Robotics and Automation Letters, vol. 7, no. 2, pp. 2487–2494, 2022.
+[19] L. Schmid, M. Pantic, R. Khanna, L. Ott, R. Siegwart, and J. Nieto,
+“An efficient sampling-based method for online informative path
+planning in unknown environments,” IEEE Robotics and Automation
+Letters, vol. 5, no. 2, pp. 1500–1507, 2020.
+
+[20] B. Zhou, Y. Zhang, X. Chen, and S. Shen, “Fuel: Fast uav exploration
+using incremental frontier structure and hierarchical planning,” IEEE
+Robotics and Automation Letters, vol. 6, no. 2, pp. 779–786, 2021.
+
+[21] M. Dharmadhikari, T. Dang, L. Solanka, J. Loje, H. Nguyen,
+N. Khedekar, and K. Alexis, “Motion primitives-based path planning
+for fast and agile exploration using aerial robots,” in 2020 IEEE
+International Conference on Robotics and Automation (ICRA).
+IEEE,
+2020, pp. 179–185.
+
+[22] M. Luperto, L. Fochetta, and F. Amigoni, “Exploration of indoor envi-
+ronments through predicting the layout of partially observed rooms,”
+in Proceedings of the 20th International Conference on Autonomous
+Agents and MultiAgent Systems, 2021, pp. 836–843.
+
+[23] L. Schmid, C. Ni, Y. Zhong, R. Siegwart, and O. Andersson, “Fast
+and compute-efficient sampling-based local exploration planning via
+distribution learning,” IEEE Robotics and Automation Letters, vol. 7,
+no. 3, pp. 7810–7817, 2022.
+
+[24] D. Zhu, T. Li, D. Ho, C. Wang, and M. Q.-H. Meng, “Deep
+reinforcement learning supervised autonomous exploration in office
+environments,” in 2018 IEEE international conference on robotics and
+automation (ICRA).
+
+IEEE, 2018, pp. 7548–7555.
+
+[25] F. Chen, S. Bai, T. Shan, and B. Englot, “Self-learning exploration
+and mapping for mobile robots via deep reinforcement learning,” in
+Aiaa scitech 2019 forum, 2019, p. 0396.
+
+[26] H. Li, Q. Zhang, and D. Zhao, “Deep reinforcement learning-based
+automatic exploration for navigation in unknown environment,” IEEE
+transactions on neural networks and learning systems, vol. 31, no. 6,
+pp. 2064–2076, 2019.
+
+[27] Y. Xu, J. Yu, J. Tang, J. Qiu, J. Wang, Y. Shen, Y. Wang, and H. Yang,
+“Explore-bench: Data sets, metrics and evaluations for frontier-based
+and deep-reinforcement-learning-based autonomous exploration,” in
+2022 International Conference on Robotics and Automation (ICRA),
+2022, pp. 6225–6231.
+
+[28] F. Chen, J. D. Martin, Y. Huang, J. Wang, and B. Englot, “Autonomous
+learning on
+
+exploration under uncertainty via deep reinforcement
